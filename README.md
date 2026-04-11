@@ -49,8 +49,9 @@ That is the whole caller workflow. Five useful lines of `with:`.
 Then:
 
 1. Configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)
-   on `registry.npmjs.org` for your package, pointing at this repo and
-   workflow.
+   on `registry.npmjs.org` for your package. **Point it at YOUR repo and
+   YOUR `release.yml`**, not at `forgesworn/release-action`. See the
+   "Trusted publisher caveat" section below for why.
 2. Bump `package.json` version and add a `CHANGELOG.md` entry.
 3. Commit, tag (`v1.2.3`), push, and create a GitHub Release for the
    tag. The workflow takes over from there.
@@ -72,8 +73,11 @@ In order:
    on disk
 10. **verify-secrets** — grep `dist/` (and any paths in `"files"`) for
     forbidden filenames and secret markers
-11. **publish-npm** — idempotent `npm publish --provenance --access public`
-    via OIDC. Skipped if the exact version is already on the registry.
+11. **publish-npm** — idempotent `npm publish --access public` via OIDC.
+    Provenance is driven by `package.json` `publishConfig.provenance: true`
+    rather than a CLI flag (npm 11.6+ can short-circuit to `ENEEDAUTH`
+    when `--provenance` is passed explicitly). Skipped if the exact
+    version is already on the registry.
 12. **publish-jsr** — only if `jsr.json` exists in your repo
 13. **update-release** — updates the GitHub Release body from the
     matching `CHANGELOG.md` section
@@ -84,7 +88,7 @@ If any gate fails, the workflow fails and nothing is published.
 
 | Input | Default | Description |
 |---|---|---|
-| `node-version` | `22` | Node version used for npm operations |
+| `node-version` | `24.11.0` | Node version used for npm operations (must ship with npm >= 11.5.1 for OIDC trusted publishing) |
 | `registry-url` | `https://registry.npmjs.org` | npm registry |
 | `test-command` | `npm test` | Full test suite command |
 | `vector-test-command` | *(empty)* | Frozen-vector gate command |
@@ -114,6 +118,49 @@ This means you can freely mix heading levels — `semantic-release`'s
 
 If you use [Keep a Changelog](https://keepachangelog.com) format, that
 works too. No strict format is enforced.
+
+## Trusted publisher caveat (important)
+
+npm's trusted publisher matches against the OIDC token's **`workflow_ref`**
+claim — the **caller** workflow, not the reusable workflow.
+
+That means: when you use `forgesworn/release-action` via the reusable
+workflow pattern, your package's trusted publisher must be configured
+for **your own repo** and **your own caller workflow file**, not for
+`forgesworn/release-action/release.yml`.
+
+Configure on npmjs.com → your package → Settings → Trusted Publisher:
+
+| Field | Value |
+|---|---|
+| Publisher | GitHub Actions |
+| Organization or user | your GitHub org/user |
+| Repository | **your package's repo** |
+| Workflow filename | **your caller workflow file** (e.g. `release.yml`) |
+| Environment | (leave empty) |
+
+The reusable workflow still gets you centralised gate logic — one place
+to update tag-match, secret scan, exports sanity, frozen-vector check,
+runtime audit, etc., across every consumer. That's the real benefit.
+
+What it does **not** give you is a single trusted-publisher record in
+`forgesworn/release-action` that every consumer points at. That pattern
+would require npm to match on `job_workflow_ref` (the reusable), which
+it doesn't today. Jordan Harband (npm contributor) has recommended
+against trusted publishing with reusable workflows for this reason — see
+[`npm/documentation#1755`](https://github.com/npm/documentation/issues/1755).
+It still works fine; you just configure the trust at the consumer
+boundary rather than the reusable-workflow boundary.
+
+If you see `npm publish` fail with:
+
+```
+OIDC token exchange error - package not found
+```
+
+at `/-/npm/v1/oidc/token/exchange/package/<name>`, the most likely
+cause is the trusted publisher is configured for the wrong repo.
+Change the Repository field to your package's own repo.
 
 ## Advanced: composite action directly
 
