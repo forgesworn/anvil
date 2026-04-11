@@ -52,6 +52,15 @@ runs:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
 
+    # OIDC trusted publishing for the actual publish step requires
+    # npm >= 11.5.1. Node 22 LTS ships with npm 10.9.x which signs
+    # provenance via OIDC but still tries to publish with NPM_TOKEN,
+    # failing with a misleading 404 when no token is present. Upgrade
+    # in-place so the rest of the job runs on modern npm.
+    - name: Upgrade npm for OIDC trusted publishing
+      shell: bash
+      run: npm install -g 'npm@>=11.5.1'
+
     - name: Install dependencies
       shell: bash
       run: npm ci
