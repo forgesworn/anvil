@@ -56,16 +56,31 @@ runs:
         registry-url: ${{ inputs.registry-url }}
 
     # OIDC trusted publishing for the actual publish step requires
-    # npm >= 11.5.1. Node 22 LTS ships with npm 10.9.x which signs
-    # provenance via OIDC but still tries to publish with NPM_TOKEN,
-    # failing with a misleading 404 when no token is present.
-    #
-    # sudo + pinned version avoids the self-upgrade race where npm
-    # breaks its own arborist dep tree mid-install. Ubuntu runners
-    # have passwordless sudo.
+    # npm >= 11.5.1. Node 22 LTS ships with npm 10.9.x. We install the
+    # newer npm into a user-owned prefix and prepend to PATH so every
+    # subsequent step uses it. See release.yml for the longer comment
+    # on why sudo/self-upgrade approaches don't work.
     - name: Upgrade npm for OIDC trusted publishing
       shell: bash
-      run: sudo npm install -g npm@11.5.2
+      run: |
+        set -euo pipefail
+        NPM_VERSION=11.5.2
+        TARGET="$HOME/.npm-upgrade"
+        mkdir -p "$TARGET"
+        npm install --prefix "$TARGET" --no-save "npm@$NPM_VERSION"
+        echo "$TARGET/node_modules/.bin" >> "$GITHUB_PATH"
+        "$TARGET/node_modules/.bin/npm" --version
+
+    # Clear setup-node's placeholder _authToken from .npmrc so npm's
+    # OIDC exchange kicks in instead of trying to auth with the bogus
+    # XXXXX-XXXXX-XXXXX-XXXXX token.
+    - name: Clear npmrc placeholder auth for OIDC
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ -n "${NPM_CONFIG_USERCONFIG:-}" && -f "$NPM_CONFIG_USERCONFIG" ]]; then
+          sed -i '/:_authToken=/d' "$NPM_CONFIG_USERCONFIG"
+        fi
 
     - name: Install dependencies
       shell: bash
