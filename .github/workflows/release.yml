@@ -174,7 +174,6 @@ jobs:
 
       - name: Publish to npm
         env:
-          NPM_CONFIG_PROVENANCE: 'true'
           NODE_AUTH_TOKEN: ''
         run: $ACTION_SRC/steps/publish-npm.sh
 

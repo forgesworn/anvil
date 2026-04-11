@@ -116,9 +116,8 @@ runs:
       shell: bash
       env:
         PACKAGE_JSON: ${{ inputs.package-json }}
-        NPM_CONFIG_PROVENANCE: 'true'
         # Defensive: ensure no placeholder auth token is in the env
-        # for the publish step, so npm 11.5+ OIDC exchange kicks in.
+        # for the publish step, so npm OIDC exchange kicks in.
         NODE_AUTH_TOKEN: ''
         DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
       run: ${{ github.action_path }}/steps/publish-npm.sh

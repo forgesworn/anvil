@@ -46,8 +46,13 @@ if published="$(npm view "${name}@${version}" version 2>/dev/null)" && [[ -n "$p
   exit 0
 fi
 
+# Note: --provenance is NOT passed on the CLI. Instead we rely on
+# package.json's "publishConfig.provenance": true to drive provenance
+# signing. npm 11.6+ short-circuits to "ENEEDAUTH" when --provenance is
+# passed explicitly, never initiating OIDC trusted publishing exchange.
+# paulmillr/jsbt uses the same implicit pattern; it works.
 log "running dry-run first"
-if ! npm publish --dry-run --provenance --access public; then
+if ! npm publish --dry-run --access public; then
   die "npm publish --dry-run failed"
 fi
 
@@ -56,8 +61,8 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
   exit 0
 fi
 
-log "publishing with provenance"
-if ! npm publish --provenance --access public; then
+log "publishing"
+if ! npm publish --access public; then
   die "npm publish failed"
 fi
 
