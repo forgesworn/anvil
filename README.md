@@ -1,29 +1,64 @@
 # forgesworn/release-action
 
-A cryptography-grade release tool for JavaScript and TypeScript libraries.
+In 2026, most Nostr and Bitcoin JavaScript libraries still publish
+with long-lived `NPM_TOKEN` secrets off a maintainer's workstation.
+The few that use OIDC use it with no release-time gates beyond
+"does the git tag match the `package.json` version". That is
+pre-2020 supply-chain hygiene for a category whose entire value
+proposition is trust.
 
-Pure `bash` + `jq` + `gh` + `npm`. No Node tooling in the action itself.
-OIDC trusted publishing. Provenance on every publish. Hard pre-publish
-gates for tag/version match, secret scan, exports sanity, frozen test
-vectors, and runtime audit.
+This is a release tool for cryptography libraries that fixes that.
+It bundles OIDC trusted publishing, SLSA provenance on every
+publish, a secret scan scoped to the actual publish pack set, an
+exports-map check that verifies every subpath exists on disk
+([`publint`](https://publint.dev/rules) explicitly skips this check;
+`arethetypeswrong` does type resolution, not file presence), a
+consumer-supplied frozen-vector gate, and a runtime-only `npm audit`
+so devDep noise does not block releases.
 
-The entire action is auditable in under thirty minutes. That is a hard
-design constraint, not a slogan.
+Pure `bash` + `jq` + `gh` + `npm`. No Node tooling in the action
+itself. ~730 lines of bash across every step script. Auditable in
+under thirty minutes — a hard design constraint, not a slogan.
 
 ## Why this exists
 
-The dominant JS/TS release tool chains — `semantic-release`, `changesets` —
-bring hundreds of transitive devDependencies with them. For a CRUD app
-that is background noise. For a deterministic cryptography library whose
-whole value proposition is byte-identical output across implementations
-and time, it is a supply-chain surface area no crypto library author
-should accept.
+Two things are true about the JS/TS release tooling landscape in 2026.
 
-None of `@noble/*`, `@scure/*`, `nostr-tools`, `bitcoinjs-lib`,
-`bitcoinerlab`, or `nostrify` use heavy release tooling. paulmillr ships
-[`jsbt`](https://github.com/paulmillr/jsbt) — a tiny reusable workflow —
-for the same reason. This action generalises that pattern and adds the
-gates crypto libraries actually care about.
+**One**: the dominant release tools — `semantic-release`, `changesets` —
+bring hundreds of transitive devDependencies with them. For a CRUD app
+that is background noise. For a cryptography library whose entire value
+proposition is byte-identical output across implementations and time,
+it is a supply-chain surface area no crypto library author should
+accept.
+
+**Two**: most crypto JS libraries already know this and have responded
+by not using release tooling at all. A quick survey of major Nostr
+and Bitcoin JS libraries as of 2026-04:
+
+- [`nbd-wtf/nostr-tools`](https://github.com/nbd-wtf/nostr-tools) —
+  no release workflow. Manual `npm publish` off a workstation.
+- [`bitcoinjs/bitcoinjs-lib`](https://github.com/bitcoinjs/bitcoinjs-lib) —
+  CI is test-only. Manual publish.
+- [`getAlby/js-sdk`](https://github.com/getAlby/js-sdk) — custom yarn
+  workflow with classic `NODE_AUTH_TOKEN`. No OIDC, no provenance.
+- `bitcoinerlab/secp256k1` — likely manual; workflows not public.
+- [`paulmillr/noble-hashes`](https://github.com/paulmillr/noble-hashes) —
+  the only one in the group using OIDC + SLSA provenance, via
+  paulmillr's personal [`jsbt`](https://github.com/paulmillr/jsbt)
+  reusable workflow. Tag/version match only. No secret scan, no
+  exports-sanity check, no frozen-vector gate, no audit.
+
+One of those six uses OIDC trusted publishing. None use a secret
+scan. None use an exports-sanity check. None use a frozen-vector
+gate. This is what supply-chain hygiene looks like for a category
+whose customers are trusting the output to be byte-identical and
+the source to be sin-free.
+
+This action takes the `jsbt` pure-bash pattern and adds the gates
+crypto libraries actually care about, packaged as one reusable
+workflow any JS/TS library can adopt in five lines of caller
+workflow. It is deliberately positioned as community infrastructure,
+not as personal infra retroactively opened up.
 
 ## Quick start (reusable workflow)
 
