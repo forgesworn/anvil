@@ -55,17 +55,6 @@ runs:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
 
-    # Node 24.11.0 ships with npm that supports OIDC trusted publishing.
-    # Clear setup-node's placeholder _authToken from .npmrc (defensive:
-    # some setup-node versions write a literal XXXXX-XXXXX-XXXXX-XXXXX
-    # placeholder when no token is provided).
-    - name: Clear npmrc placeholder auth for OIDC
-      shell: bash
-      run: |
-        set -euo pipefail
-        if [[ -n "${NPM_CONFIG_USERCONFIG:-}" && -f "$NPM_CONFIG_USERCONFIG" ]]; then
-          sed -i '/:_authToken=/d' "$NPM_CONFIG_USERCONFIG"
-        fi
 
     - name: Install dependencies
       shell: bash
@@ -116,9 +105,6 @@ runs:
       shell: bash
       env:
         PACKAGE_JSON: ${{ inputs.package-json }}
-        # Defensive: ensure no placeholder auth token is in the env
-        # for the publish step, so npm OIDC exchange kicks in.
-        NODE_AUTH_TOKEN: ''
         DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
       run: ${{ github.action_path }}/steps/publish-npm.sh
 
