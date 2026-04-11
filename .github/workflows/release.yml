@@ -179,10 +179,23 @@ jobs:
           npm config list || true
 
       # Publish directly as an inline step (not via publish-npm.sh) to
-      # match paulmillr/jsbt's exact pattern and rule out any bash
-      # wrapper interference with npm's OIDC trusted publishing flow.
+      # match paulmillr/jsbt's exact pattern. Aggressively unsets every
+      # npm auth-adjacent env var and deletes the setup-node-written
+      # .npmrc so npm falls through to its default config and the
+      # OIDC trusted publishing path can initiate.
       - name: Publish to npm (inline)
-        run: npm publish --access public
+        run: |
+          set -euo pipefail
+          unset NODE_AUTH_TOKEN
+          unset NPM_CONFIG_USERCONFIG
+          rm -f "$HOME/.npmrc"
+          if [[ -f "/home/runner/work/_temp/.npmrc" ]]; then
+            rm -f "/home/runner/work/_temp/.npmrc"
+          fi
+          echo "npm config after cleanup:"
+          npm config list
+          echo "---"
+          npm publish --access public
 
       - name: Publish to JSR (if jsr.json exists)
         env:
