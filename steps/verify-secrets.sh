@@ -118,12 +118,30 @@ done
 
 # Content checks. We grep each pattern across all files under the roots.
 # -I skips binary files; -r recurses; -E enables extended regex.
+#
+# Documentation file extensions are excluded because libraries legitimately
+# publish protocol docs and test vectors containing example secrets (e.g.
+# an nsec1 derived-key example in PROTOCOL.md). Filename-based checks above
+# still cover those (.env in dist/docs would still fail), so the leak-in-
+# source case is preserved.
+content_exclude_globs=(
+  '*.md'
+  '*.markdown'
+  '*.txt'
+  '*.rst'
+  '*.adoc'
+)
+grep_excludes=()
+for glob in "${content_exclude_globs[@]}"; do
+  grep_excludes+=(--exclude="$glob")
+done
+
 for pattern in "${forbidden_patterns[@]}"; do
   while IFS= read -r hit; do
     warn "forbidden content ($pattern): $hit"
     fail=1
   done < <(
-    grep -rEIl --binary-files=without-match -- "$pattern" "${existing_roots[@]}" 2>/dev/null || true
+    grep -rEIl --binary-files=without-match "${grep_excludes[@]}" -- "$pattern" "${existing_roots[@]}" 2>/dev/null || true
   )
 done
 

@@ -78,3 +78,26 @@ teardown() {
   run "$ACTION_ROOT/steps/verify-secrets.sh"
   [ "$status" -eq 0 ]
 }
+
+@test "verify-secrets: allows nsec1 test vectors in PROTOCOL.md" {
+  # Regression: crypto libraries publish documentation containing example
+  # derived secrets (test vectors). Those are intentional. Secret-marker
+  # content scans must skip common documentation extensions while
+  # filename checks stay universal.
+  write_package_json '{"name":"pkg","version":"1.0.0","files":["dist","PROTOCOL.md"]}'
+  write_file "dist/index.js" "export {};"
+  write_file "PROTOCOL.md" "
+child_nsec = nsec1nr5ck3mw4v7zhj6syrj2v7dyrd6wa0anpgregnzrv8ysv5qjvhnsafv7mx
+child_nsec = nsec1l3329mrljxtscjzln469xf5drf4qwfe7aq5u73xgw6zl0p6c7p8sd6vumk
+"
+  run "$ACTION_ROOT/steps/verify-secrets.sh"
+  [ "$status" -eq 0 ]
+}
+
+@test "verify-secrets: still catches nsec1 in source code (not just docs)" {
+  write_package_json '{"name":"pkg","version":"1.0.0","files":["dist"]}'
+  write_file "dist/bad.js" "const leaked = 'nsec1nr5ck3mw4v7zhj6syrj2v7dyrd6wa0anpgregnzrv8ysv5qjvhnsafv7mx';"
+  run "$ACTION_ROOT/steps/verify-secrets.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"forbidden content"* ]]
+}
