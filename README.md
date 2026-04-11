@@ -56,6 +56,10 @@ Then:
 3. Commit, tag (`v1.2.3`), push, and create a GitHub Release for the
    tag. The workflow takes over from there.
 
+Already using `semantic-release`? See
+[`docs/migration-from-semantic-release.md`](docs/migration-from-semantic-release.md)
+for the recipe distilled from the first pilot.
+
 ## What the action does
 
 In order:
@@ -96,6 +100,7 @@ If any gate fails, the workflow fails and nothing is published.
 | `package-json` | `package.json` | Path to package.json |
 | `audit-level` | `low` | `npm audit` severity floor |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
+| `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors — see "Trusted publisher caveat". Does not print token values. |
 
 ### Secrets
 
@@ -161,6 +166,12 @@ OIDC token exchange error - package not found
 at `/-/npm/v1/oidc/token/exchange/package/<name>`, the most likely
 cause is the trusted publisher is configured for the wrong repo.
 Change the Repository field to your package's own repo.
+
+If that does not fix it, add `debug: true` to your caller workflow's
+`with:` block and re-run. The diagnostic step dumps npm version, the
+redacted effective `.npmrc`, OIDC env var presence, and `npm config
+list` — enough ground-truth to tell whether npm is missing the OIDC
+context entirely or has it but cannot match the trusted publisher.
 
 ## Advanced: composite action directly
 

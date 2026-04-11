@@ -67,6 +67,11 @@ on:
         required: false
         type: string
         default: 'false'
+      debug:
+        description: If "true", run a diagnostic step before publish that dumps npm version, redacted .npmrc, OIDC env vars, and npm config. Useful for debugging trusted-publisher setup issues. Off by default.
+        required: false
+        type: string
+        default: 'false'
     secrets:
       JSR_TOKEN:
         description: JSR publishing token (required only if jsr.json exists)
@@ -144,6 +149,32 @@ jobs:
 
       - name: Verify no secrets in artefacts
         run: $ACTION_SRC/steps/verify-secrets.sh
+
+      # Gated behind `debug: true`. When a consumer hits the classic
+      # "OIDC token exchange error - package not found" (or similar),
+      # flipping this on and re-running surfaces enough environmental
+      # ground-truth to diagnose trusted-publisher misconfiguration,
+      # npm-version mismatch, or missing OIDC env vars without having
+      # to fork the action. Does not print token values.
+      - name: Diagnose npm auth configuration (debug)
+        if: ${{ inputs.debug == 'true' }}
+        run: |
+          set -euo pipefail
+          echo "npm version: $(npm --version)"
+          echo "which npm: $(which npm)"
+          echo "node: $(node --version)"
+          echo "NPM_CONFIG_USERCONFIG=${NPM_CONFIG_USERCONFIG:-<unset>}"
+          if [[ -n "${NPM_CONFIG_USERCONFIG:-}" && -f "$NPM_CONFIG_USERCONFIG" ]]; then
+            echo "--- userconfig .npmrc (redacted) ---"
+            sed 's/\(_authToken=\).*/\1<REDACTED>/' "$NPM_CONFIG_USERCONFIG"
+            echo "--- end ---"
+          fi
+          echo "NODE_AUTH_TOKEN present: ${NODE_AUTH_TOKEN:+yes}"
+          echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS:-<unset>}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
+          echo "--- npm config list ---"
+          npm config list || true
 
       - name: Publish to npm
         run: $ACTION_SRC/steps/publish-npm.sh
