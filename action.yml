@@ -47,7 +47,10 @@ runs:
   using: composite
   steps:
     - name: Setup Node
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      # v6 handles the OIDC-no-token case correctly; earlier versions
+      # write a placeholder _authToken that short-circuits the OIDC
+      # exchange in npm 11.5+.
+      uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
       with:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
@@ -114,6 +117,9 @@ runs:
       env:
         PACKAGE_JSON: ${{ inputs.package-json }}
         NPM_CONFIG_PROVENANCE: 'true'
+        # Defensive: ensure no placeholder auth token is in the env
+        # for the publish step, so npm 11.5+ OIDC exchange kicks in.
+        NODE_AUTH_TOKEN: ''
         DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
       run: ${{ github.action_path }}/steps/publish-npm.sh
 
