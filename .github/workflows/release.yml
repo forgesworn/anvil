@@ -62,6 +62,11 @@ on:
         required: false
         type: string
         default: 'low'
+      strict-action-pins:
+        description: If "true", verify-action-pins fails the release on any unpinned `uses:` reference in .github/workflows. Default warn-only. forgesworn/release-action is exempt by name.
+        required: false
+        type: string
+        default: 'false'
       dry-run:
         description: If "true", skip the real publish
         required: false
@@ -120,6 +125,11 @@ jobs:
       # and self-upgrading npm mid-workflow is fragile — we tried.
       # Matching paulmillr/jsbt's pinned default here.
 
+      - name: Verify action pins
+        env:
+          STRICT_ACTION_PINS: ${{ inputs.strict-action-pins == 'true' && '1' || '0' }}
+        run: $ACTION_SRC/steps/verify-action-pins.sh
+
       - name: Install dependencies
         run: npm ci
 
@@ -149,6 +159,9 @@ jobs:
 
       - name: Verify no secrets in artefacts
         run: $ACTION_SRC/steps/verify-secrets.sh
+
+      - name: Record tarball integrity
+        run: $ACTION_SRC/steps/record-tarball.sh
 
       # Gated behind `debug: true`. When a consumer hits the classic
       # "OIDC token exchange error - package not found" (or similar),

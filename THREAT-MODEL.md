@@ -19,7 +19,7 @@ of the defences listed below, that change needs explicit justification.
    the version bump and CHANGELOG entry. CI handles tag verification,
    gates, publish, GitHub Release body update.
 5. **The action source must be auditable in under thirty minutes total.**
-   Currently ~730 lines of bash across all step scripts.
+   Currently ~1000 lines of bash across all step scripts.
 
 ## Threats addressed
 
@@ -35,6 +35,8 @@ of the defences listed below, that change needs explicit justification.
 | Maintainer accidentally pushing the wrong commit | GitHub Release trigger forces explicit, reviewable action. The maintainer creates the Release manually and the action runs only in response. |
 | Supply-chain attack via the action's own transitive dependencies | The action has no Node dependencies. It invokes `bash`, `jq`, `gh`, `npm`, and `sed`/`awk`/`find`/`grep` from the GitHub-managed runner image. No fetched binaries. |
 | Race between parallel releases publishing the same version twice | `publish-npm` is idempotent: if the exact version is already on the registry, it exits `0` without re-publishing. |
+| Registry tarball substitution between publish and consumer fetch | `record-tarball` packs the artefact once and writes its sha512 (npm integrity format) plus sha256 to a meta file. `publish-npm` uploads that exact tarball — not a re-pack — and on a clean re-run compares the registry's `dist.integrity` to the recorded value: a mismatch fails the workflow loudly. The hashes are also stamped into the GitHub Release body so consumers can `curl | shasum` the registry tarball at any time. |
+| Compromised third-party action re-pointed at malicious code via tag mutation (the `tj-actions/changed-files` 2025-03 vector) | `verify-action-pins` walks `.github/workflows/*.yml` in the consumer repo and warns on any `uses: owner/repo@ref` line whose ref is not a 40-char hex SHA. Warn-only by default; `strict-action-pins: true` promotes to fail. |
 
 ## Threats explicitly NOT addressed
 
@@ -101,6 +103,47 @@ best practice for published packages — it makes the publish surface
 area predictable and greppable — and it closes this gap as a side
 effect. nsec-tree's `files` is a good reference:
 `["dist", "src", "README.md", "CHANGELOG.md", "LICENCE"]`.
+
+### Recorded tarball SHA is a single-runner anchor, not a reproducibility proof
+
+`record-tarball` runs `npm pack` once on the release runner and hashes
+the result. The sha256 (and the npm-format sha512) stamped into the
+GitHub Release body is therefore a guarantee that the registry tarball
+matches the bytes that **this specific runner** produced — nothing more.
+
+Two runners building the same commit could in principle produce two
+different sha256s today, because tar headers carry timestamps and
+some build pipelines leak absolute paths or other host-specific data
+into compiled output. A multi-runner reproducible-build attestation
+(two parallel build jobs that compare hashes and refuse to publish on
+divergence) is a planned `v0.4` theme. Until then, the integrity block
+is best understood as "did the registry serve the bytes CI built",
+not "is this build deterministic".
+
+For most adopters this is still a meaningful upgrade, because the
+threat the integrity block actually defends against is registry
+tarball substitution between publish time and consumer fetch — and
+that does not require build-level determinism to detect.
+
+### `verify-action-pins` exempts `forgesworn/release-action` and skips dynamic uses
+
+The `verify-action-pins` gate has two known false negatives:
+
+1. **Self-exemption.** Lines whose action name is `forgesworn/release-action`
+   or starts with `forgesworn/release-action/` are not flagged, even in
+   `strict-action-pins: true` mode. Without this carve-out, every
+   consumer's release would fail on the line that loads the gate
+   itself (`uses: forgesworn/release-action@v0`). The exemption is by
+   **name**, not by ref — a consumer who SHA-pins us in their caller
+   workflow gets the same SHA-pin enforcement on every other action.
+   This is a pragmatic trade-off: it sidesteps a chicken-and-egg
+   adoption problem at the cost of moving the trust decision for
+   release-action itself one level up, into the consumer's choice of
+   pin in the caller workflow.
+2. **Dynamic uses.** A `uses: ${{ matrix.action }}` line cannot be
+   resolved statically and is silently ignored. Consumers who template
+   action references through matrix expressions should audit those
+   templates separately.
 
 ### Changelog extraction matches version as substring
 

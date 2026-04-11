@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 header "update-release"
-require_cmds gh
+require_cmds gh jq
 
 tag="${GIT_TAG:-${GITHUB_REF_NAME:-}}"
 [[ -n "$tag" ]] || die "no tag provided (set GIT_TAG or GITHUB_REF_NAME)"
@@ -43,6 +43,71 @@ notes="$(printf '%s\n' "$notes" | awk '
 if [[ -z "$notes" ]]; then
   warn "changelog section was empty — leaving release body unchanged"
   exit 0
+fi
+
+# Append the artefact integrity block if record-tarball wrote a meta
+# file. The block stamps the tarball filename, size, sha256, and npm
+# integrity (sha512) into the release body so consumers can hash-compare
+# the registry tarball against what CI built. Missing meta is logged
+# and skipped, never fatal — the changelog body still gets posted.
+meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
+meta_file="$meta_dir/tarball.meta"
+if [[ -f "$meta_file" ]]; then
+  filename=""; size=""; sha256=""; integrity=""
+  while IFS='=' read -r key value; do
+    case "$key" in
+      filename)  filename="$value" ;;
+      size)      size="$value" ;;
+      sha256)    sha256="$value" ;;
+      integrity) integrity="$value" ;;
+    esac
+  done < "$meta_file"
+
+  if [[ -n "$filename" && -n "$sha256" && -n "$integrity" ]]; then
+    pkg="${PACKAGE_JSON:-package.json}"
+    name=""
+    if [[ -f "$pkg" ]]; then
+      name="$(jq -r '.name // empty' "$pkg" 2>/dev/null || true)"
+    fi
+
+    # Heredoc with EOF unquoted so ${var} interpolates; backticks are
+    # escaped so the markdown fences come through literally.
+    integrity_block="$(cat <<EOF
+
+---
+
+## Artefact integrity
+
+\`\`\`
+file:      ${filename}
+size:      ${size} bytes
+sha256:    ${sha256}
+${integrity}
+\`\`\`
+EOF
+)"
+
+    if [[ -n "$name" ]]; then
+      verify_recipe="$(cat <<EOF
+
+Verify against the registry tarball:
+
+\`\`\`sh
+curl -sLO https://registry.npmjs.org/${name}/-/${filename}
+shasum -a 256 ${filename}
+\`\`\`
+EOF
+)"
+      integrity_block="${integrity_block}${verify_recipe}"
+    fi
+
+    notes="${notes}${integrity_block}"
+    log "appended artefact integrity block to release body"
+  else
+    warn "tarball meta file present but missing required fields — skipping integrity block"
+  fi
+else
+  log "no tarball meta at $meta_file — skipping integrity block"
 fi
 
 log "updating release $tag"

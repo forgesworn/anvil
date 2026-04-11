@@ -13,11 +13,14 @@ publish, a secret scan scoped to the actual publish pack set, an
 exports-map check that verifies every subpath exists on disk
 ([`publint`](https://publint.dev/rules) explicitly skips this check;
 `arethetypeswrong` does type resolution, not file presence), a
-consumer-supplied frozen-vector gate, and a runtime-only `npm audit`
-so devDep noise does not block releases.
+consumer-supplied frozen-vector gate, a runtime-only `npm audit` so
+devDep noise does not block releases, a recorded tarball SHA stamped
+into the GitHub Release body so consumers can hash-compare the
+registry tarball against what CI built, and a warn-by-default audit
+of unpinned `uses:` references in the consumer's own workflows.
 
 Pure `bash` + `jq` + `gh` + `npm`. No Node tooling in the action
-itself. ~730 lines of bash across every step script. Auditable in
+itself. ~1000 lines of bash across every step script. Auditable in
 under thirty minutes — a hard design constraint, not a slogan.
 
 ## Why this exists
@@ -101,25 +104,37 @@ In order:
 
 1. **Checkout** your repo and this action at the pinned SHA
 2. **Setup Node** with OIDC registry configured
-3. **`npm ci`**
-4. **`npm run build --if-present`**
-5. **verify-tag** — git tag matches `package.json` version
-6. **run-tests** — full test suite (`npm test` by default)
-7. **verify-vectors** — your configured frozen-vector command (skipped
+3. **verify-action-pins** — scan `.github/workflows/*.yml` for `uses:`
+   lines that aren't 40-char SHA pinned. Warn-only by default; promote
+   to hard-fail with `strict-action-pins: true`
+4. **`npm ci`**
+5. **`npm run build --if-present`**
+6. **verify-tag** — git tag matches `package.json` version
+7. **run-tests** — full test suite (`npm test` by default)
+8. **verify-vectors** — your configured frozen-vector command (skipped
    if not set; crypto libraries should set this)
-8. **verify-audit** — `npm audit --omit=dev` — runtime deps only
-9. **verify-exports** — every subpath in `package.json` `"exports"` exists
-   on disk
-10. **verify-secrets** — grep `dist/` (and any paths in `"files"`) for
+9. **verify-audit** — `npm audit --omit=dev` — runtime deps only
+10. **verify-exports** — every subpath in `package.json` `"exports"` exists
+    on disk
+11. **verify-secrets** — grep `dist/` (and any paths in `"files"`) for
     forbidden filenames and secret markers
-11. **publish-npm** — idempotent `npm publish --access public` via OIDC.
-    Provenance is driven by `package.json` `publishConfig.provenance: true`
-    rather than a CLI flag (npm 11.6+ can short-circuit to `ENEEDAUTH`
-    when `--provenance` is passed explicitly). Skipped if the exact
-    version is already on the registry.
-12. **publish-jsr** — only if `jsr.json` exists in your repo
-13. **update-release** — updates the GitHub Release body from the
-    matching `CHANGELOG.md` section
+12. **record-tarball** — `npm pack` into a known location, parse the
+    `--json` output for filename and sha512 integrity, hash the
+    tarball with sha256, write a meta file the next two steps consume
+13. **publish-npm** — idempotent `npm publish --access public` via OIDC,
+    publishing the **exact** tarball recorded in step 12 (so the bytes
+    on the registry are the bytes we hashed). Provenance is driven by
+    `package.json` `publishConfig.provenance: true` rather than a CLI
+    flag (npm 11.6+ short-circuits to `ENEEDAUTH` when `--provenance` is
+    passed explicitly). On a clean re-run the registry's `dist.integrity`
+    is compared to the locally recorded integrity: match → silent skip,
+    mismatch → loud failure (registry tarball substitution alarm).
+14. **publish-jsr** — only if `jsr.json` exists in your repo
+15. **update-release** — updates the GitHub Release body from the
+    matching `CHANGELOG.md` section, then appends an *Artefact integrity*
+    block containing tarball filename, size, sha256, sha512, and a
+    one-line `curl | shasum` recipe consumers can run to verify the
+    registry tarball matches
 
 If any gate fails, the workflow fails and nothing is published.
 
@@ -134,6 +149,7 @@ If any gate fails, the workflow fails and nothing is published.
 | `changelog-file` | `CHANGELOG.md` | Path to CHANGELOG |
 | `package-json` | `package.json` | Path to package.json |
 | `audit-level` | `low` | `npm audit` severity floor |
+| `strict-action-pins` | `false` | If `true`, **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Default warn-only. `forgesworn/release-action` is exempt by name. |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
 | `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors — see "Trusted publisher caveat". Does not print token values. |
 
@@ -158,6 +174,68 @@ This means you can freely mix heading levels — `semantic-release`'s
 
 If you use [Keep a Changelog](https://keepachangelog.com) format, that
 works too. No strict format is enforced.
+
+## Artefact integrity
+
+Every release body produced by this action ends with an *Artefact
+integrity* block. Rendered, it looks like:
+
+> **Artefact integrity**
+>
+> ```
+> file:      noble-hashes-1.4.2.tgz
+> size:      87234 bytes
+> sha256:    9a5ec1...e7c1
+> sha512-...
+> ```
+>
+> Verify against the registry tarball:
+>
+> ```sh
+> curl -sLO https://registry.npmjs.org/noble-hashes/-/noble-hashes-1.4.2.tgz
+> shasum -a 256 noble-hashes-1.4.2.tgz
+> ```
+
+This is a single-runner integrity anchor: the hash recorded in the
+release body is computed from the same tarball bytes that `publish-npm`
+uploads to the registry, so a downstream consumer can fetch the
+registry tarball and confirm byte-equivalence with what CI built.
+
+It is **not** yet a reproducible-build proof — two runners building
+the same commit may produce two different sha256s today, due to
+embedded timestamps and path leakage. Cross-runner reproducibility is
+a planned `v0.4` theme. See
+[`THREAT-MODEL.md`](THREAT-MODEL.md) for the precise claim.
+
+On a clean re-run of an already-published release, `publish-npm`
+fetches the registry's `dist.integrity` and compares it to the local
+recorded value. A match exits silently. A mismatch fails the workflow
+loudly: that scenario is registry tarball substitution, and you want
+to know about it on the next CI run rather than discover it later.
+
+## Workflow pin auditing
+
+`verify-action-pins` walks `.github/workflows/*.yml` in **your** repo
+and emits a warning for every `uses: owner/repo@ref` line whose ref
+isn't a 40-character hex SHA. By default this is warn-only — adopting
+the action does not start failing your existing release on day one.
+Set `strict-action-pins: true` in your caller workflow to promote the
+warnings to a hard failure.
+
+The reason is the [`tj-actions/changed-files` incident in March 2025](https://github.com/tj-actions/changed-files/issues/2464):
+a tag-pinned action can be silently re-pointed at malicious code by
+an attacker who compromises the action's repo or tag namespace. SHA
+pinning binds the action to a specific commit so re-pointing has no
+effect on existing consumers.
+
+`forgesworn/release-action` itself is **exempt by name** from this
+gate. Without the carve-out, every consumer's release would fail on
+the line that loads the gate (`uses: forgesworn/release-action@v0`).
+Consumers who want SHA-pinning of release-action itself should still
+do so in their caller workflow with a 40-char SHA pin; the exemption
+is by name, not by ref, so the rest of your workflow's SHA-pin
+enforcement works exactly as you'd expect. See
+[`THREAT-MODEL.md`](THREAT-MODEL.md) for the rationale.
 
 ## Trusted publisher caveat (important)
 
