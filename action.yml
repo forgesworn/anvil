@@ -1,0 +1,123 @@
+name: forgesworn-release
+description: >-
+  Cryptography-grade release tool for JS/TS libraries. OIDC trusted
+  publishing, provenance, secret scan, exports sanity, frozen-vector gate.
+  Pure bash — no Node tooling in the action itself.
+author: forgesworn
+
+branding:
+  icon: package
+  color: purple
+
+inputs:
+  node-version:
+    description: Node version used for npm operations (default is the engines floor of forgesworn libs)
+    required: false
+    default: '22'
+  registry-url:
+    description: npm registry URL for publishes
+    required: false
+    default: 'https://registry.npmjs.org'
+  test-command:
+    description: Command that runs the full test suite
+    required: false
+    default: 'npm test'
+  vector-test-command:
+    description: Command for the frozen-vector gate (empty to skip)
+    required: false
+    default: ''
+  changelog-file:
+    description: Path to CHANGELOG.md
+    required: false
+    default: 'CHANGELOG.md'
+  package-json:
+    description: Path to package.json
+    required: false
+    default: 'package.json'
+  audit-level:
+    description: npm audit level (low|moderate|high|critical)
+    required: false
+    default: 'low'
+  dry-run:
+    description: If "true", skip the real publish (for smoke-testing)
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Build
+      shell: bash
+      run: npm run build --if-present
+
+    - name: Verify tag matches package.json
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+        GIT_TAG: ${{ github.event.release.tag_name }}
+      run: ${{ github.action_path }}/steps/verify-tag.sh
+
+    - name: Run tests
+      shell: bash
+      env:
+        TEST_COMMAND: ${{ inputs.test-command }}
+      run: ${{ github.action_path }}/steps/run-tests.sh
+
+    - name: Verify frozen vectors
+      shell: bash
+      env:
+        VECTOR_TEST_COMMAND: ${{ inputs.vector-test-command }}
+      run: ${{ github.action_path }}/steps/verify-vectors.sh
+
+    - name: Verify runtime audit
+      shell: bash
+      env:
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+      run: ${{ github.action_path }}/steps/verify-audit.sh
+
+    - name: Verify exports map
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+      run: ${{ github.action_path }}/steps/verify-exports.sh
+
+    - name: Verify no secrets in artefacts
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+      run: ${{ github.action_path }}/steps/verify-secrets.sh
+
+    - name: Publish to npm
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+        NPM_CONFIG_PROVENANCE: 'true'
+        DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
+      run: ${{ github.action_path }}/steps/publish-npm.sh
+
+    - name: Publish to JSR (if jsr.json exists)
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+        JSR_TOKEN: ${{ env.JSR_TOKEN }}
+        DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
+      run: ${{ github.action_path }}/steps/publish-jsr.sh
+
+    - name: Update GitHub Release body from CHANGELOG
+      shell: bash
+      env:
+        GIT_TAG: ${{ github.event.release.tag_name }}
+        CHANGELOG_FILE: ${{ inputs.changelog-file }}
+        PACKAGE_JSON: ${{ inputs.package-json }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: ${{ github.action_path }}/steps/update-release.sh

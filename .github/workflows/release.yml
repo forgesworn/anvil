@@ -1,0 +1,153 @@
+name: release
+
+# Reusable workflow consumers call from their own release.yml.
+# This is the primary documented surface — the composite action exists
+# as a power-user escape hatch only.
+#
+# Caller example:
+#
+#   name: release
+#   on:
+#     release:
+#       types: [published]
+#   permissions:
+#     contents: write
+#     id-token: write
+#   jobs:
+#     release:
+#       uses: forgesworn/release-action/.github/workflows/release.yml@v1
+#       with:
+#         vector-test-command: npm run test:vectors
+#
+# When pinned with @v1 (or any ref), the action scripts are pulled from
+# forgesworn/release-action at the same SHA as this workflow — there is
+# no floating @main reference, so v1-pinned consumers get deterministic
+# behaviour until they bump the pin.
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node version used for npm operations
+        required: false
+        type: string
+        default: '22'
+      registry-url:
+        description: npm registry URL
+        required: false
+        type: string
+        default: 'https://registry.npmjs.org'
+      test-command:
+        description: Command that runs the full test suite
+        required: false
+        type: string
+        default: 'npm test'
+      vector-test-command:
+        description: Command for the frozen-vector gate (empty to skip)
+        required: false
+        type: string
+        default: ''
+      changelog-file:
+        description: Path to CHANGELOG.md
+        required: false
+        type: string
+        default: 'CHANGELOG.md'
+      package-json:
+        description: Path to package.json
+        required: false
+        type: string
+        default: 'package.json'
+      audit-level:
+        description: npm audit level
+        required: false
+        type: string
+        default: 'low'
+      dry-run:
+        description: If "true", skip the real publish
+        required: false
+        type: string
+        default: 'false'
+    secrets:
+      JSR_TOKEN:
+        description: JSR publishing token (required only if jsr.json exists)
+        required: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      PACKAGE_JSON: ${{ inputs.package-json }}
+      CHANGELOG_FILE: ${{ inputs.changelog-file }}
+      GIT_TAG: ${{ github.event.release.tag_name }}
+      DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
+      # Path where we check out release-action sources. Using a dot
+      # prefix so it sorts out of the way and never collides with a
+      # consumer path.
+      ACTION_SRC: .release-action
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Checkout release-action at pinned SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: forgesworn/release-action
+          ref: ${{ github.job_workflow_sha }}
+          path: ${{ env.ACTION_SRC }}
+          persist-credentials: false
+
+      - name: Setup Node with OIDC registry
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: ${{ inputs.registry-url }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Verify tag matches package.json
+        run: $ACTION_SRC/steps/verify-tag.sh
+
+      - name: Run tests
+        env:
+          TEST_COMMAND: ${{ inputs.test-command }}
+        run: $ACTION_SRC/steps/run-tests.sh
+
+      - name: Verify frozen vectors
+        env:
+          VECTOR_TEST_COMMAND: ${{ inputs.vector-test-command }}
+        run: $ACTION_SRC/steps/verify-vectors.sh
+
+      - name: Verify runtime audit
+        env:
+          AUDIT_LEVEL: ${{ inputs.audit-level }}
+        run: $ACTION_SRC/steps/verify-audit.sh
+
+      - name: Verify exports map
+        run: $ACTION_SRC/steps/verify-exports.sh
+
+      - name: Verify no secrets in artefacts
+        run: $ACTION_SRC/steps/verify-secrets.sh
+
+      - name: Publish to npm
+        env:
+          NPM_CONFIG_PROVENANCE: 'true'
+        run: $ACTION_SRC/steps/publish-npm.sh
+
+      - name: Publish to JSR (if jsr.json exists)
+        env:
+          JSR_TOKEN: ${{ secrets.JSR_TOKEN }}
+        run: $ACTION_SRC/steps/publish-jsr.sh
+
+      - name: Update GitHub Release body from CHANGELOG
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: $ACTION_SRC/steps/update-release.sh
