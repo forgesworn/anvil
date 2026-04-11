@@ -55,11 +55,14 @@ runs:
     # OIDC trusted publishing for the actual publish step requires
     # npm >= 11.5.1. Node 22 LTS ships with npm 10.9.x which signs
     # provenance via OIDC but still tries to publish with NPM_TOKEN,
-    # failing with a misleading 404 when no token is present. Upgrade
-    # in-place so the rest of the job runs on modern npm.
+    # failing with a misleading 404 when no token is present.
+    #
+    # sudo + pinned version avoids the self-upgrade race where npm
+    # breaks its own arborist dep tree mid-install. Ubuntu runners
+    # have passwordless sudo.
     - name: Upgrade npm for OIDC trusted publishing
       shell: bash
-      run: npm install -g 'npm@>=11.5.1'
+      run: sudo npm install -g npm@11.5.2
 
     - name: Install dependencies
       shell: bash
