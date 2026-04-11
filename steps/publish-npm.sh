@@ -62,7 +62,10 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
 fi
 
 log "publishing"
-if ! npm publish --access public; then
+# --loglevel silly temporarily to capture OIDC exchange + HTTP flow on
+# failure so trusted-publisher mismatches can be diagnosed from the run
+# log. Drop this once the pilot ships cleanly.
+if ! npm publish --access public --loglevel silly 2>&1; then
   die "npm publish failed"
 fi
 
