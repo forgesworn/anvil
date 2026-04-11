@@ -52,18 +52,25 @@ meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
 meta_file="$meta_dir/tarball.meta"
 [[ -f "$meta_file" ]] || die "tarball meta not found at $meta_file (record-tarball must run before publish-npm)"
 
-tarball_path=""
+filename=""
 recorded_integrity=""
 while IFS='=' read -r key value; do
   case "$key" in
-    path)      tarball_path="$value" ;;
+    filename)  filename="$value" ;;
     integrity) recorded_integrity="$value" ;;
   esac
 done < "$meta_file"
 
-[[ -n "$tarball_path"        ]] || die "meta file missing path"
+[[ -n "$filename"            ]] || die "meta file missing filename"
 [[ -n "$recorded_integrity"  ]] || die "meta file missing integrity"
-[[ -f "$tarball_path"        ]] || die "tarball not found at $tarball_path"
+
+# Reconstruct the tarball path from $TARBALL_META_DIR + filename rather
+# than trusting the `path=` field. The meta file may have been written
+# in a different job (with a different RUNNER_TEMP) and downloaded as
+# an artifact into our own meta dir, so the recorded absolute path is
+# unreliable. The filename is stable.
+tarball_path="$meta_dir/$filename"
+[[ -f "$tarball_path" ]] || die "tarball not found at $tarball_path"
 
 # Idempotency: if the registry already has this version, compare
 # integrity. A match means a clean re-run of an already-successful

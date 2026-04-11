@@ -8,19 +8,26 @@ pre-2020 supply-chain hygiene for a category whose entire value
 proposition is trust.
 
 This is a release tool for cryptography libraries that fixes that.
-It bundles OIDC trusted publishing, SLSA provenance on every
-publish, a secret scan scoped to the actual publish pack set, an
-exports-map check that verifies every subpath exists on disk
+It bundles OIDC trusted publishing, SLSA provenance on every publish,
+a secret scan scoped to the actual publish pack set, an exports-map
+check that verifies every subpath exists on disk
 ([`publint`](https://publint.dev/rules) explicitly skips this check;
 `arethetypeswrong` does type resolution, not file presence), a
 consumer-supplied frozen-vector gate, a runtime-only `npm audit` so
-devDep noise does not block releases, a recorded tarball SHA stamped
-into the GitHub Release body so consumers can hash-compare the
-registry tarball against what CI built, and a warn-by-default audit
-of unpinned `uses:` references in the consumer's own workflows.
+devDep noise does not block releases, a warn-by-default audit of
+unpinned `uses:` references in the consumer's own workflows, **and a
+multi-runner reproducible-build attestation that publishes only when
+two independent CI builds produce byte-identical tarballs**.
+
+That last one is the v0.4 flagship. None of `semantic-release`,
+`@changesets/cli`, `release-it`, `release-please`, or `np` offers it
+today. The hash of the registry tarball is also stamped into the GitHub
+Release body and uploaded as a release asset, so consumers have two
+independent sources for the bytes (npm registry + GitHub Releases) and
+can hash-compare against either.
 
 Pure `bash` + `jq` + `gh` + `npm`. No Node tooling in the action
-itself. ~1000 lines of bash across every step script. Auditable in
+itself. ~1250 lines of bash across every step script. Auditable in
 under thirty minutes — a hard design constraint, not a slogan.
 
 ## Why this exists
@@ -100,7 +107,20 @@ for the recipe distilled from the first pilot.
 
 ## What the action does
 
+The reusable workflow runs as a four-job DAG:
+
+```
+   build-a ──────┐
+   (full gates +  │
+    record)       ├──> reproduce ──> publish
+   build-b ──────┘    (compare      (publish-npm,
+   (build +           sha256s)       publish-jsr,
+    record)                          update-release)
+```
+
 In order:
+
+**`build-a`** runs every gate on the consumer-supplied artefact:
 
 1. **Checkout** your repo and this action at the pinned SHA
 2. **Setup Node** with OIDC registry configured
@@ -118,25 +138,54 @@ In order:
     on disk
 11. **verify-secrets** — grep `dist/` (and any paths in `"files"`) for
     forbidden filenames and secret markers
-12. **record-tarball** — `npm pack` into a known location, parse the
-    `--json` output for filename and sha512 integrity, hash the
-    tarball with sha256, write a meta file the next two steps consume
+12. **record-tarball** — derive `SOURCE_DATE_EPOCH` from `git log`,
+    normalise mtimes across the working tree, `npm pack` into a known
+    location, parse the `--json` output for filename and sha512
+    integrity, hash with sha256, write `tarball.meta` and upload it
+    along with the `.tgz` as an artifact
+
+**`build-b`** runs in parallel on a separate runner: checkout, setup,
+`npm ci`, build, `record-tarball`, upload. Same `SOURCE_DATE_EPOCH`,
+same normalised mtimes, same pack — the resulting tarball must be
+byte-identical.
+
+**`reproduce`** downloads both artifacts and runs **compare-tarball-meta**,
+which exits 0 if the sha256s match. Under the default
+`reproducibility-mode: strict` a mismatch is a hard failure and the
+release is blocked. Under `reproducibility-mode: warn` the mismatch
+is logged and the publish proceeds. Under `reproducibility-mode: off`
+the second build and the comparison are skipped entirely (v0.3
+single-runner behaviour).
+
+**`publish`** downloads the canonical tarball from `build-a` and runs:
+
 13. **publish-npm** — idempotent `npm publish --access public` via OIDC,
-    publishing the **exact** tarball recorded in step 12 (so the bytes
-    on the registry are the bytes we hashed). Provenance is driven by
-    `package.json` `publishConfig.provenance: true` rather than a CLI
-    flag (npm 11.6+ short-circuits to `ENEEDAUTH` when `--provenance` is
-    passed explicitly). On a clean re-run the registry's `dist.integrity`
-    is compared to the locally recorded integrity: match → silent skip,
-    mismatch → loud failure (registry tarball substitution alarm).
+    publishing the **exact** tarball downloaded above (so the bytes on
+    the registry are the bytes the reproduce gate signed off on).
+    Provenance is driven by `package.json` `publishConfig.provenance: true`
+    rather than a CLI flag (npm 11.6+ short-circuits to `ENEEDAUTH`
+    when `--provenance` is passed explicitly). On a clean re-run the
+    registry's `dist.integrity` is compared to the recorded integrity:
+    match → silent skip, mismatch → loud failure (registry tarball
+    substitution alarm).
 14. **publish-jsr** — only if `jsr.json` exists in your repo
 15. **update-release** — updates the GitHub Release body from the
-    matching `CHANGELOG.md` section, then appends an *Artefact integrity*
+    matching `CHANGELOG.md` section, appends an *Artefact integrity*
     block containing tarball filename, size, sha256, sha512, and a
-    one-line `curl | shasum` recipe consumers can run to verify the
-    registry tarball matches
+    `curl | shasum` recipe consumers can run to verify the registry
+    tarball matches; uploads the canonical `.tgz` as a GitHub Release
+    asset so consumers have two independent sources for the bytes; and
+    if the reproduce job ran and matched, prepends a *"Reproducible
+    build"* line above the integrity block.
 
 If any gate fails, the workflow fails and nothing is published.
+
+The composite action (`action.yml`) does **not** include the
+reproduce job — composite actions are flat lists of steps inside one
+job and cannot define a multi-job DAG. The composite remains as an
+escape hatch for power users who need custom job structure; it ships
+with a strictly weaker guarantee (single-runner integrity anchor only,
+no reproducibility check). Use the reusable workflow as the default.
 
 ## Inputs
 
@@ -150,6 +199,7 @@ If any gate fails, the workflow fails and nothing is published.
 | `package-json` | `package.json` | Path to package.json |
 | `audit-level` | `low` | `npm audit` severity floor |
 | `strict-action-pins` | `false` | If `true`, **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Default warn-only. `forgesworn/release-action` is exempt by name. |
+| `reproducibility-mode` | `strict` | One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
 | `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors — see "Trusted publisher caveat". Does not print token values. |
 
@@ -175,10 +225,41 @@ This means you can freely mix heading levels — `semantic-release`'s
 If you use [Keep a Changelog](https://keepachangelog.com) format, that
 works too. No strict format is enforced.
 
-## Artefact integrity
+## Reproducible builds (v0.4 flagship)
 
-Every release body produced by this action ends with an *Artefact
-integrity* block. Rendered, it looks like:
+The reusable workflow runs **two independent builds in parallel** on
+two GitHub Actions runners. Both pack the artefact with normalised
+mtimes and `SOURCE_DATE_EPOCH` derived from `git log`. The
+`reproduce` job downloads both meta files and compares the sha256s.
+
+Under the default `reproducibility-mode: strict`, a mismatch is a
+hard failure: the release is blocked, both hashes are printed, and
+the diff between the two tar listings is dumped so the maintainer can
+see which file's mtime or content drifted. Common causes are listed
+in the failure message — `Date.now()` in build output, sorted-by-fs
+globs, random IDs in build scripts, host paths in source maps.
+
+Under `reproducibility-mode: warn` the mismatch is logged and the
+release proceeds with `build-A`. Under `off` the second build is
+skipped entirely and you fall back to v0.3 single-runner behaviour.
+
+When two builds match, the GitHub Release body gains a top line:
+
+> **Reproducible build**: byte-identical output verified across two
+> independent CI runners.
+
+This is a stronger claim than SLSA provenance. Provenance attests
+that *some* runner built these bytes *once*. The reproduce gate
+attests that **two** independent runners building the same commit
+arrive at the *same* bytes — the actual byte-identical-output property
+that crypto-library customers care about.
+
+### Single-runner integrity anchor (sub-feature)
+
+Whether reproducibility is on or off, every release body still ends
+with an *Artefact integrity* block stamping the canonical tarball's
+filename, size, sha256, and npm-format sha512 plus a `curl | shasum`
+verify recipe:
 
 > **Artefact integrity**
 >
@@ -196,22 +277,35 @@ integrity* block. Rendered, it looks like:
 > shasum -a 256 noble-hashes-1.4.2.tgz
 > ```
 
-This is a single-runner integrity anchor: the hash recorded in the
-release body is computed from the same tarball bytes that `publish-npm`
-uploads to the registry, so a downstream consumer can fetch the
-registry tarball and confirm byte-equivalence with what CI built.
-
-It is **not** yet a reproducible-build proof — two runners building
-the same commit may produce two different sha256s today, due to
-embedded timestamps and path leakage. Cross-runner reproducibility is
-a planned `v0.4` theme. See
-[`THREAT-MODEL.md`](THREAT-MODEL.md) for the precise claim.
+The same `.tgz` is also uploaded as a GitHub Release asset, so a
+consumer can fetch from either npm or GitHub Releases and hash-compare
+both against the same recorded sha256. Two independent sources for
+the bytes is strictly more valuable than one for a crypto library.
 
 On a clean re-run of an already-published release, `publish-npm`
 fetches the registry's `dist.integrity` and compares it to the local
 recorded value. A match exits silently. A mismatch fails the workflow
 loudly: that scenario is registry tarball substitution, and you want
 to know about it on the next CI run rather than discover it later.
+
+### Limitations of the reproduce gate
+
+- **Single OS only.** Both builds run on `ubuntu-24.04`. Cross-OS
+  reproducibility is a stronger claim that adds a correctness burden
+  on consumers (their build must work on multiple OSes); it is not
+  in scope for v0.4.
+- **Two-run sample size.** A non-determinism source that fires
+  probabilistically (one in a thousand) won't reliably show up in
+  two runs. Accept this as the cost of CI minutes.
+- **`SOURCE_DATE_EPOCH` is opt-in for build tools.** We can't force
+  `esbuild`/`rollup`/`webpack`/`tsc` to honour it. Belt-and-braces
+  mtime normalisation closes the file-stamp gap, but embedded
+  timestamps inside compiled output are still the consumer's bug to
+  fix.
+
+See [`docs/migration-from-v0.3.md`](docs/migration-from-v0.3.md) if
+you're upgrading from v0.3 and want the safer `warn` middle path
+during the migration.
 
 ## Workflow pin auditing
 

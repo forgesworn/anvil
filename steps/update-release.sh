@@ -50,8 +50,14 @@ fi
 # integrity (sha512) into the release body so consumers can hash-compare
 # the registry tarball against what CI built. Missing meta is logged
 # and skipped, never fatal — the changelog body still gets posted.
+#
+# When REPRODUCIBLE=1 (set by the publish job after the reproduce job
+# confirmed two independent builds matched), a "Reproducible build"
+# header line is added above the integrity block. When unset or 0, the
+# block ships as a single-runner integrity anchor only.
 meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
 meta_file="$meta_dir/tarball.meta"
+tarball_path=""
 if [[ -f "$meta_file" ]]; then
   filename=""; size=""; sha256=""; integrity=""
   while IFS='=' read -r key value; do
@@ -70,11 +76,22 @@ if [[ -f "$meta_file" ]]; then
       name="$(jq -r '.name // empty' "$pkg" 2>/dev/null || true)"
     fi
 
+    # Reconstruct the tarball path from the meta dir + filename so we
+    # do not depend on the absolute path written by a different job.
+    tarball_path="$meta_dir/$filename"
+
+    # Reproducibility badge — only if the publish job confirmed it.
+    badge=""
+    if [[ "${REPRODUCIBLE:-0}" == "1" ]]; then
+      badge=$'\n\n**Reproducible build**: byte-identical output verified across two independent CI runners.'
+    fi
+
     # Heredoc with EOF unquoted so ${var} interpolates; backticks are
     # escaped so the markdown fences come through literally.
     integrity_block="$(cat <<EOF
 
 ---
+${badge}
 
 ## Artefact integrity
 
@@ -113,6 +130,19 @@ fi
 log "updating release $tag"
 if ! gh release edit "$tag" --notes "$notes"; then
   die "gh release edit failed"
+fi
+
+# Upload the canonical tarball as a release asset so consumers have a
+# second independent source for the bytes (registry + GH Releases) and
+# can cross-verify against both. --clobber makes this idempotent on
+# re-runs of an already-published release.
+if [[ -n "$tarball_path" && -f "$tarball_path" ]]; then
+  log "uploading $tarball_path as release asset"
+  if ! gh release upload "$tag" "$tarball_path" --clobber; then
+    warn "gh release upload failed — release body updated but asset not attached"
+  else
+    log "asset uploaded"
+  fi
 fi
 
 ok "release $tag body updated from CHANGELOG"

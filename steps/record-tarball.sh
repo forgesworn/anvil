@@ -16,15 +16,19 @@
 #   - npm pack --json already returns the SLSA-aligned sha512 integrity
 #     value, so we do not have to roll our own.
 #
-# Determinism note: a single sha256 here is a single-runner integrity
-# anchor, not a reproducible-build proof. Two runners may produce two
-# different sha256s today due to embedded timestamps and path leakage.
-# Reproducibility across runners is a v0.4 theme. THREAT-MODEL.md spells
-# this out.
+# Reproducibility (v0.4):
+#   Before packing, this script derives SOURCE_DATE_EPOCH from the git
+#   commit time of HEAD (if not already set) and exports it, then calls
+#   normalise-mtimes.sh to touch every file in the working tree to that
+#   epoch. The combination of (export SOURCE_DATE_EPOCH) and (uniform
+#   file mtimes) makes a subsequent `npm pack` produce a tar with
+#   identical headers and content between two independent builds — the
+#   foundation of the v0.4 reproducible-build attestation.
 #
 # Env:
-#   PACKAGE_JSON       (default: package.json)
-#   TARBALL_META_DIR   (default: $RUNNER_TEMP/forgesworn-release, then /tmp)
+#   PACKAGE_JSON        (default: package.json)
+#   TARBALL_META_DIR    (default: $RUNNER_TEMP/forgesworn-release, then /tmp)
+#   SOURCE_DATE_EPOCH   (default: derived from git log -1 --format=%ct)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -36,6 +40,23 @@ require_cmds jq npm shasum
 
 pkg="${PACKAGE_JSON:-package.json}"
 [[ -f "$pkg" ]] || die "$pkg not found"
+
+# Derive SOURCE_DATE_EPOCH from git if not already set. Without an
+# epoch we cannot guarantee reproducibility — fail loudly rather than
+# silently fall back to wall-clock time.
+if [[ -z "${SOURCE_DATE_EPOCH:-}" ]]; then
+  if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+    SOURCE_DATE_EPOCH="$(git log -1 --format=%ct 2>/dev/null || true)"
+  fi
+fi
+[[ -n "${SOURCE_DATE_EPOCH:-}" ]] || die "SOURCE_DATE_EPOCH is not set and no git checkout is available; cannot pack reproducibly"
+export SOURCE_DATE_EPOCH
+log "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+
+# Belt-and-braces mtime normalisation. Even if some build tool ignored
+# SOURCE_DATE_EPOCH, the resulting tar headers are still byte-equal
+# because every file has the same mtime by the time we pack.
+"${SCRIPT_DIR}/normalise-mtimes.sh"
 
 meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
 mkdir -p "$meta_dir"

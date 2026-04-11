@@ -1,8 +1,13 @@
 name: forgesworn-release
 description: >-
   Cryptography-grade release tool for JS/TS libraries. OIDC trusted
-  publishing, provenance, secret scan, exports sanity, frozen-vector gate.
-  Pure bash — no Node tooling in the action itself.
+  publishing, provenance, secret scan, exports sanity, frozen-vector
+  gate, single-runner tarball integrity anchor. Pure bash, no Node
+  tooling. NOTE: this composite action does NOT include the v0.4
+  multi-runner reproducible-build attestation; that requires a multi-job
+  DAG and lives in the reusable workflow at .github/workflows/release.yml.
+  Use the composite only as a power-user escape hatch when you need
+  custom job structure; the reusable workflow is the primary path.
 author: forgesworn
 
 branding:

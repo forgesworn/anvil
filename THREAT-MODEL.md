@@ -19,7 +19,7 @@ of the defences listed below, that change needs explicit justification.
    the version bump and CHANGELOG entry. CI handles tag verification,
    gates, publish, GitHub Release body update.
 5. **The action source must be auditable in under thirty minutes total.**
-   Currently ~1000 lines of bash across all step scripts.
+   Currently ~1250 lines of bash across all step scripts.
 
 ## Threats addressed
 
@@ -37,6 +37,7 @@ of the defences listed below, that change needs explicit justification.
 | Race between parallel releases publishing the same version twice | `publish-npm` is idempotent: if the exact version is already on the registry, it exits `0` without re-publishing. |
 | Registry tarball substitution between publish and consumer fetch | `record-tarball` packs the artefact once and writes its sha512 (npm integrity format) plus sha256 to a meta file. `publish-npm` uploads that exact tarball — not a re-pack — and on a clean re-run compares the registry's `dist.integrity` to the recorded value: a mismatch fails the workflow loudly. The hashes are also stamped into the GitHub Release body so consumers can `curl | shasum` the registry tarball at any time. |
 | Compromised third-party action re-pointed at malicious code via tag mutation (the `tj-actions/changed-files` 2025-03 vector) | `verify-action-pins` walks `.github/workflows/*.yml` in the consumer repo and warns on any `uses: owner/repo@ref` line whose ref is not a 40-char hex SHA. Warn-only by default; `strict-action-pins: true` promotes to fail. |
+| Non-deterministic build masking a regression in compiled output | The reusable workflow runs **two parallel builds on independent runners**, both packed with normalised mtimes and `SOURCE_DATE_EPOCH` derived from `git log`. The `reproduce` job compares the two sha256s and (under the default `reproducibility-mode: strict`) refuses to publish on mismatch. This catches embedded build timestamps, sorted-by-fs globs, random IDs, and host-path leakage — the common ways non-determinism slips into a JS bundle. Stronger than SLSA provenance: provenance attests one runner built these bytes once; reproduce attests two runners arrive at the same bytes. |
 
 ## Threats explicitly NOT addressed
 
@@ -104,26 +105,41 @@ area predictable and greppable — and it closes this gap as a side
 effect. nsec-tree's `files` is a good reference:
 `["dist", "src", "README.md", "CHANGELOG.md", "LICENCE"]`.
 
-### Recorded tarball SHA is a single-runner anchor, not a reproducibility proof
+### The reproduce gate is single-OS and two-run
 
-`record-tarball` runs `npm pack` once on the release runner and hashes
-the result. The sha256 (and the npm-format sha512) stamped into the
-GitHub Release body is therefore a guarantee that the registry tarball
-matches the bytes that **this specific runner** produced — nothing more.
+The v0.4 reproduce gate runs both builds on `ubuntu-24.04`. That
+catches non-determinism that varies between runner instances —
+timestamps, random tmp paths, build-tool ordering — but it does not
+catch determinism violations that vary across operating systems.
+Cross-OS reproducibility is a stronger claim that adds a real
+correctness burden on consumers (their build must work on multiple
+OSes); v0.5 territory at the earliest, and only if pilot feedback
+shows demand.
 
-Two runners building the same commit could in principle produce two
-different sha256s today, because tar headers carry timestamps and
-some build pipelines leak absolute paths or other host-specific data
-into compiled output. A multi-runner reproducible-build attestation
-(two parallel build jobs that compare hashes and refuse to publish on
-divergence) is a planned `v0.4` theme. Until then, the integrity block
-is best understood as "did the registry serve the bytes CI built",
-not "is this build deterministic".
+Two runs is also the minimum sample size for empirical reproducibility
+testing. A non-determinism source that fires probabilistically (one
+in a thousand) won't reliably show up in two runs. We accept this as
+the cost of CI minutes; the alternative is N runs and the marginal
+value drops fast.
 
-For most adopters this is still a meaningful upgrade, because the
-threat the integrity block actually defends against is registry
-tarball substitution between publish time and consumer fetch — and
-that does not require build-level determinism to detect.
+`SOURCE_DATE_EPOCH` is opt-in for build tools. We can't force
+`esbuild`/`rollup`/`webpack`/`tsc` to honour it, so
+`normalise-mtimes.sh` does belt-and-braces mtime fixing across the
+working tree to close the file-stamp gap unconditionally. Embedded
+timestamps inside compiled output (e.g. a `__BUILD_TIMESTAMP__` macro)
+are still the consumer's bug to fix and will reliably fail the
+reproduce gate.
+
+### The composite action does NOT include the reproduce gate
+
+`action.yml` (the composite action) is a flat list of steps inside
+one job. It cannot define the multi-job DAG that the reproduce gate
+requires. Consumers who use the composite action get the v0.3
+single-runner integrity anchor only — strictly weaker than the
+reusable workflow's reproducibility claim. The composite stays as a
+power-user escape hatch for custom job structure; the reusable
+workflow is the documented default and the only path to the v0.4
+flagship guarantee.
 
 ### `verify-action-pins` exempts `forgesworn/release-action` and skips dynamic uses
 
