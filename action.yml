@@ -11,9 +11,9 @@ branding:
 
 inputs:
   node-version:
-    description: Node version used for npm operations (default is the engines floor of forgesworn libs)
+    description: Node version used for npm operations (must ship with npm >= 11.5.x for OIDC trusted publishing)
     required: false
-    default: '22'
+    default: '24.11.0'
   registry-url:
     description: npm registry URL for publishes
     required: false
@@ -55,25 +55,10 @@ runs:
         node-version: ${{ inputs.node-version }}
         registry-url: ${{ inputs.registry-url }}
 
-    # OIDC trusted publishing for the actual publish step requires
-    # npm >= 11.5.1. Node 22 LTS ships with npm 10.9.x. We install the
-    # newer npm into a user-owned prefix and prepend to PATH so every
-    # subsequent step uses it. See release.yml for the longer comment
-    # on why sudo/self-upgrade approaches don't work.
-    - name: Upgrade npm for OIDC trusted publishing
-      shell: bash
-      run: |
-        set -euo pipefail
-        NPM_VERSION=11.5.2
-        TARGET="$HOME/.npm-upgrade"
-        mkdir -p "$TARGET"
-        npm install --prefix "$TARGET" --no-save "npm@$NPM_VERSION"
-        echo "$TARGET/node_modules/.bin" >> "$GITHUB_PATH"
-        "$TARGET/node_modules/.bin/npm" --version
-
-    # Clear setup-node's placeholder _authToken from .npmrc so npm's
-    # OIDC exchange kicks in instead of trying to auth with the bogus
-    # XXXXX-XXXXX-XXXXX-XXXXX token.
+    # Node 24.11.0 ships with npm that supports OIDC trusted publishing.
+    # Clear setup-node's placeholder _authToken from .npmrc (defensive:
+    # some setup-node versions write a literal XXXXX-XXXXX-XXXXX-XXXXX
+    # placeholder when no token is provided).
     - name: Clear npmrc placeholder auth for OIDC
       shell: bash
       run: |
