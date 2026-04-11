@@ -42,6 +42,10 @@ inputs:
     description: If "true", skip the real publish (for smoke-testing)
     required: false
     default: 'false'
+  debug:
+    description: If "true", run a diagnostic step before publish that dumps npm version, redacted .npmrc, OIDC env vars, and `npm config list`. Off by default. Useful for debugging trusted-publisher setup.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -100,6 +104,32 @@ runs:
       env:
         PACKAGE_JSON: ${{ inputs.package-json }}
       run: ${{ github.action_path }}/steps/verify-secrets.sh
+
+    # Gated behind `debug: true`. When a consumer hits an opaque
+    # trusted-publisher error, flipping this on surfaces environmental
+    # ground-truth (npm version, redacted .npmrc, OIDC env var presence,
+    # `npm config list`) without having to fork the action. Does not
+    # print token values.
+    - name: Diagnose npm auth configuration (debug)
+      if: ${{ inputs.debug == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "npm version: $(npm --version)"
+        echo "which npm: $(which npm)"
+        echo "node: $(node --version)"
+        echo "NPM_CONFIG_USERCONFIG=${NPM_CONFIG_USERCONFIG:-<unset>}"
+        if [[ -n "${NPM_CONFIG_USERCONFIG:-}" && -f "$NPM_CONFIG_USERCONFIG" ]]; then
+          echo "--- userconfig .npmrc (redacted) ---"
+          sed 's/\(_authToken=\).*/\1<REDACTED>/' "$NPM_CONFIG_USERCONFIG"
+          echo "--- end ---"
+        fi
+        echo "NODE_AUTH_TOKEN present: ${NODE_AUTH_TOKEN:+yes}"
+        echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS:-<unset>}"
+        echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+        echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
+        echo "--- npm config list ---"
+        npm config list || true
 
     - name: Publish to npm
       shell: bash

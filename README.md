@@ -218,19 +218,27 @@ action has been in production use across several forgesworn libraries.
 
 ## Threat model
 
-See [THREAT-MODEL.md](THREAT-MODEL.md) *(coming)*. Summary: the action
-defends against accidentally publishing the wrong version, secrets in
-artefacts, stolen long-lived tokens (via OIDC), and broken frozen
-vectors. It does not defend against a malicious maintainer, a
+See [THREAT-MODEL.md](THREAT-MODEL.md) for the full security contract:
+what the action defends against, what it explicitly does not, the trust
+boundaries, and the known limitations of the secret scan. Summary: the
+action defends against accidentally publishing the wrong version,
+secrets in artefacts, stolen long-lived tokens (via OIDC), and broken
+frozen vectors. It does not defend against a malicious maintainer, a
 compromised GitHub, or a compromised registry.
 
 ## Contributing
 
 This action is deliberately small. Before adding a feature, ask whether
-it fits under the principles in the
-[design doc](https://github.com/forgesworn/release-action/blob/main/docs/design.md)
-*(coming)*. Non-goals: automated commit analysis, changelog generation
-as a release-blocking step, Node-based tooling inside the action.
+it fits within the trust boundaries in [THREAT-MODEL.md](THREAT-MODEL.md)
+and whether the total bash surface area stays under the thirty-minute
+audit budget.
+
+Non-goals:
+
+- Automated commit analysis or semver determination from commit messages
+- Changelog generation as a release-blocking step
+- Node-based tooling inside the action itself
+- Dependencies that are not already on the default GitHub Actions runner image
 
 ## Licence
 
