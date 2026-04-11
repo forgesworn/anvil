@@ -105,13 +105,35 @@ EOF
 )"
 
     if [[ -n "$name" ]]; then
+      # Compute the registry-side tarball filename. For unscoped packages
+      # the local `npm pack` filename matches the registry filename. For
+      # scoped packages npm flattens the scope with a dash in the local
+      # filename (e.g. @scope/pkg -> scope-pkg-1.0.0.tgz) but the registry
+      # serves the tarball at the unscoped basename within the
+      # scope-namespaced path:
+      #
+      #   local pack:   scope-pkg-1.0.0.tgz
+      #   registry url: https://registry.npmjs.org/@scope/pkg/-/pkg-1.0.0.tgz
+      #
+      # Using the local filename in the URL would 404 on scoped packages.
+      # Strip any scope/ prefix from the package name, then rebuild a
+      # `${basename}-${version}.tgz` filename for the registry path.
+      pkg_basename="${name##*/}"
+      version="$(jq -r '.version // empty' "$pkg" 2>/dev/null || true)"
+      if [[ -n "$version" ]]; then
+        registry_filename="${pkg_basename}-${version}.tgz"
+      else
+        # Defensive fallback: for unscoped packages the registry filename
+        # is the same as the local filename, so keep behaviour identical.
+        registry_filename="$filename"
+      fi
       verify_recipe="$(cat <<EOF
 
 Verify against the registry tarball:
 
 \`\`\`sh
-curl -sLO https://registry.npmjs.org/${name}/-/${filename}
-shasum -a 256 ${filename}
+curl -sLO https://registry.npmjs.org/${name}/-/${registry_filename}
+shasum -a 256 ${registry_filename}
 \`\`\`
 EOF
 )"
