@@ -39,7 +39,7 @@ permissions:
   id-token: write
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v1
+    uses: forgesworn/release-action/.github/workflows/release.yml@v0
     with:
       vector-test-command: npm run test:vectors
 ```
@@ -130,7 +130,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: forgesworn/release-action@v1
+      - uses: forgesworn/release-action@v0
         with:
           vector-test-command: npm run test:vectors
 ```
@@ -141,10 +141,14 @@ bakes the correct `permissions:` block in.
 
 ## Pinning
 
-Pin by tag (`@v1`) for stable releases, or by commit SHA for maximum
-reproducibility. Dependabot can bump pins automatically. Major version
-bumps indicate a change in gate semantics — always review before
-upgrading the pin.
+Pin by tag (`@v0` while MVP, `@v1` when stable) for stable pins, or by
+commit SHA for maximum reproducibility. Dependabot can bump pins
+automatically. Major version bumps indicate a change in gate semantics
+— always review before upgrading the pin.
+
+`v0.x` is the MVP series: the gate set may still shift in response to
+real-world pilot feedback. A `v1.0.0` release will be cut once the
+action has been in production use across several forgesworn libraries.
 
 ## Supported registries
 

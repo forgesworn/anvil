@@ -15,13 +15,13 @@ name: release
 #     id-token: write
 #   jobs:
 #     release:
-#       uses: forgesworn/release-action/.github/workflows/release.yml@v1
+#       uses: forgesworn/release-action/.github/workflows/release.yml@v0
 #       with:
 #         vector-test-command: npm run test:vectors
 #
-# When pinned with @v1 (or any ref), the action scripts are pulled from
+# When pinned with @v0 (or any ref), the action scripts are pulled from
 # forgesworn/release-action at the same SHA as this workflow — there is
-# no floating @main reference, so v1-pinned consumers get deterministic
+# no floating @main reference, so v0-pinned consumers get deterministic
 # behaviour until they bump the pin.
 
 on:
