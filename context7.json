@@ -8,14 +8,13 @@
   "excludeFolders": ["node_modules", "test"],
   "excludeFiles": [],
   "rules": [
-    "anvil is a GitHub Action, not an npm package. Consumers reference it via uses: forgesworn/anvil/.github/workflows/release.yml@v0",
-    "The composite action (uses: forgesworn/anvil@v0) omits the reproducible-build gate. Use the reusable workflow for full protection.",
-    "Node version must ship npm >= 11.5.x for OIDC trusted publishing. Node 22 LTS is too old.",
-    "Trusted publishing must be configured on npmjs.com pointing at the consumer's repo and workflow file, not at forgesworn/anvil.",
-    "The exports-map check (verify-exports.sh) uses jq to walk the full package.json exports tree -- all conditional keys (import/require/types/node/browser/default), nested conditionals, and string shorthand -- plus legacy main/module/types/typings/bin fields. Every leaf path starting with ./ must exist on disk or the release is blocked. No configuration needed; runs automatically. The only input is package-json (default: package.json).",
-    "The runtime-only npm audit (verify-audit.sh) runs npm audit --omit=dev --audit-level=$AUDIT_LEVEL. The --omit=dev flag excludes devDependencies so only runtime advisories block the release. Configure the threshold via the audit-level input (default: low; valid values: low, moderate, high, critical).",
-    "Action-pin auditing (verify-action-pins.sh) scans .github/workflows/*.yml for uses: lines whose @ref is not a 40-char SHA. Default is strict (release blocked on unpinned refs). Set strict-action-pins: false for warn-only mode. forgesworn/anvil is self-exempt by name. Motivated by the tj-actions/changed-files supply-chain attack (March 2025).",
-    "Tarball hash stamping: record-tarball.sh packs with normalised mtimes and SOURCE_DATE_EPOCH, records filename/size/sha256/sha512 to tarball.meta. After publish, update-release.sh stamps an Artefact Integrity block into the GitHub Release body with the hashes and a curl+shasum verify recipe, and uploads the .tgz as a release asset. Consumers get two independent sources for the bytes (npm registry + GitHub Releases).",
-    "SLSA provenance: driven by publishConfig.provenance: true in package.json (NOT --provenance CLI flag; npm 11.6+ breaks OIDC with explicit flag). Requires id-token: write permission. npm exchanges the GitHub OIDC token for a Sigstore certificate and attaches the attestation to the registry entry. Consumers verify via npm audit signatures or the Provenance badge on npmjs.com. Troubleshoot with debug: true input."
+    "anvil is a GitHub Action. Reusable workflow: uses: forgesworn/anvil/.github/workflows/release.yml@v0 (full four-job DAG with reproducible-build gate). Composite action: uses: forgesworn/anvil@v0 (no reproduce gate, needs actions/checkout before it).",
+    "Node must ship npm >= 11.5.x for OIDC. Trusted publishing configured on npmjs.com must point at the consumer's repo and caller workflow, not forgesworn/anvil.",
+    "Exports-map check (verify-exports.sh): jq walks full package.json exports tree (all conditional keys + nested) plus legacy main/module/types/typings/bin. Every ./ leaf path must exist on disk. Runs automatically, no config needed.",
+    "Runtime npm audit (verify-audit.sh): runs npm audit --omit=dev --audit-level=$AUDIT_LEVEL. Only runtime deps checked; devDeps ignored. Configure threshold via audit-level input (default: low).",
+    "Action-pin audit (verify-action-pins.sh): scans .github/workflows/*.yml, flags uses: refs not pinned to 40-char SHA. strict-action-pins input (default: true) controls fail vs warn. forgesworn/anvil self-exempt.",
+    "Tarball stamping: record-tarball.sh records filename/size/sha256/sha512 to tarball.meta. update-release.sh stamps Artefact Integrity block into GitHub Release body with verify recipe, uploads .tgz as release asset.",
+    "SLSA provenance: use publishConfig.provenance: true in package.json (NOT --provenance CLI flag; npm 11.6+ breaks OIDC with explicit flag). Requires id-token: write. Verify via npm audit signatures or Provenance badge on npmjs.com.",
+    "Custom pre-publish checks: use vector-test-command input for additional validation (e.g. frozen test vectors). For full custom job structure, use the composite action with extra steps before/after it. All step scripts in steps/ can also be run individually."
   ]
 }
