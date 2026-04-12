@@ -367,7 +367,6 @@ jobs:
       CHANGELOG_FILE: ${{ inputs.changelog-file }}
       GIT_TAG: ${{ inputs.tag != '' && inputs.tag || github.event.release.tag_name }}
       DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
-      TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-anvil
     steps:
       - name: Checkout consumer repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
