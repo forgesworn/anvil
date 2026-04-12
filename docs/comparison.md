@@ -206,6 +206,67 @@ If you prefer the interactive local workflow, np is the right tool.
 
 ---
 
+### vs JS-DevTools/npm-publish (666 stars, GitHub Action)
+
+JS-DevTools/npm-publish is the dominant "just publish" action. It
+detects version bumps in package.json, runs npm publish, and exits.
+v4 supports OIDC trusted publishing. No gates beyond tag/version
+detection. Node-based.
+
+**What JS-DevTools/npm-publish does better:**
+- Battle-tested (666 stars, widely used)
+- Simpler mental model when all you want is publish
+- Handles the version-detection heuristic well
+
+**What anvil does better:**
+- Pre-publish gates: secret scan, exports check, frozen vectors,
+  runtime audit, action-pin audit (JS-DevTools offers none of these)
+- Reproducible-build attestation (two-runner)
+- SLSA provenance required by default, not opt-in
+- Pure bash vs Node runtime (smaller attack surface)
+- Tarball integrity stamped into Release body + uploaded as asset
+
+**The philosophy gap:**
+JS-DevTools/npm-publish publishes. anvil publishes safely.
+If the only bar is "get bytes onto the registry with OIDC",
+JS-DevTools/npm-publish is fine. If the bar includes "no accidental
+secret leak, no broken exports, no silent non-determinism,
+no compromised third-party action in your pipeline", anvil is
+the deliberate upgrade.
+
+**Who should switch:**
+Authors who adopted JS-DevTools/npm-publish for its simplicity but
+now want supply-chain guarantees on top of OIDC.
+
+**Migration effort:** Minimal. Swap the caller workflow;
+OIDC trusted publisher config carries over unchanged.
+
+---
+
+### vs pascalgn/npm-publish-action (227 stars, GitHub Action)
+
+pascalgn/npm-publish-action is a simpler "auto-detect version,
+publish" action. No OIDC support last time checked; relies on
+long-lived NPM_TOKEN. No gates.
+
+**What pascalgn does better:**
+- Nothing relevant to the anvil user profile.
+
+**What anvil does better:**
+- OIDC vs stored NPM_TOKEN (the attack vector this tool predates)
+- All pre-publish gates
+- Reproducible builds, provenance, integrity stamping
+
+**Who should switch:**
+Anyone using pascalgn/npm-publish-action who hasn't yet migrated
+off long-lived NPM_TOKEN. The security gap vs modern tooling is
+significant.
+
+**Migration effort:** Minimal on the action side; revoke NPM_TOKEN
+and configure trusted publishing on npmjs.com.
+
+---
+
 ## Feature matrix: supply-chain hardening
 
 This is where anvil's differentiation is clearest.

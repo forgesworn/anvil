@@ -167,8 +167,20 @@ when warranted. Zero dependencies, zero config files.
 
 **Note:** The default `GITHUB_TOKEN` can create releases but cannot
 trigger further workflow runs. If you need the auto-created release to
-trigger `release.yml` automatically, use a GitHub App token or PAT
-with `contents: write` scope.
+trigger `release.yml` automatically, pass a GitHub App token or PAT
+with `contents: write` scope via the `GH_TOKEN` secret:
+
+```yaml
+jobs:
+  auto-release:
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+    secrets:
+      GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+```
+
+Store the PAT as a repo secret (e.g. `RELEASE_PAT`). Without this,
+the created Release still appears in GitHub but won't trigger
+`release.yml`.
 
 ## What the action does
 
@@ -268,7 +280,7 @@ no reproducibility check). Use the reusable workflow as the default.
 | `audit-level` | `low` | `npm audit` severity floor |
 | `version-strategy` | `manual` | One of `manual`, `verify`. `manual` is the default: you bump, you tag, the action publishes. `verify` parses conventional commits and fails if your bump is smaller than what the commits imply. For fully automatic versioning, use the companion `auto-release.yml` workflow instead. |
 | `strict-action-pins` | `true` | If `true` (the default), **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Set to `false` for warn-only mode. `forgesworn/anvil` is exempt by name. |
-| `reproducibility-mode` | `strict` | One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). |
+| `reproducibility-mode` | `strict` | Reusable workflow only. One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). The composite action silently ignores this input (it cannot run the two-build DAG; see "Advanced: composite action directly"). |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
 | `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors -- see "Trusted publisher caveat". Does not print token values. |
 
@@ -277,6 +289,33 @@ no reproducibility check). Use the reusable workflow as the default.
 | Secret | When needed |
 |---|---|
 | `JSR_TOKEN` | Only if `jsr.json` exists. JSR does not yet support OIDC. |
+| `GH_TOKEN` | Only for `auto-release.yml` when you want the auto-created Release to trigger `release.yml`. See "Version strategy -> Auto". |
+
+### JSR_TOKEN setup
+
+If your package publishes to JSR alongside npm, add a `jsr.json` in the
+repo root and provide a `JSR_TOKEN` secret.
+
+1. Generate the token at [jsr.io/account/tokens](https://jsr.io/account/tokens).
+   Choose **Personal access token** with the `publish` scope for the
+   specific package (or `publish` on the whole org). Short-lived tokens
+   are preferred -- rotate whenever convenient.
+2. Add the token as a repo secret named `JSR_TOKEN` under
+   Settings -> Secrets and variables -> Actions.
+3. Pass it through from your caller workflow:
+
+```yaml
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    secrets:
+      JSR_TOKEN: ${{ secrets.JSR_TOKEN }}
+```
+
+JSR does not yet support OIDC trusted publishing; the token is the
+only authentication path today. The action skips JSR publish entirely
+when `jsr.json` is absent, so existing npm-only consumers are
+unaffected.
 
 ## CHANGELOG format
 
@@ -419,6 +458,23 @@ Configure on npmjs.com → your package → Settings → Trusted Publisher:
 | Repository | **your package's repo** |
 | Workflow filename | **your caller workflow file** (e.g. `release.yml`) |
 | Environment | (leave empty) |
+
+### First publish of a new package
+
+npm's trusted publisher flow requires the package to already exist on
+the registry. For a brand-new package that has never been published,
+do a one-time manual publish first:
+
+```sh
+# From your workstation, with a granular access token scoped to publish
+npm publish --access public
+```
+
+Then configure trusted publishing on npmjs.com for all subsequent
+releases. The manual token can be revoked after the first publish --
+from that point on, OIDC handles everything.
+
+### Why the caller-workflow trust model
 
 The reusable workflow still gets you centralised gate logic -- one place
 to update tag-match, secret scan, exports sanity, frozen-vector check,

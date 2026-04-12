@@ -341,6 +341,7 @@ jobs:
 
 ## Links
 
+- Full docs: https://github.com/forgesworn/anvil/blob/main/llms-full.txt
 - README: https://github.com/forgesworn/anvil/blob/main/README.md
 - Threat model: https://github.com/forgesworn/anvil/blob/main/THREAT-MODEL.md
 - Design doc (reproducible builds): https://github.com/forgesworn/anvil/blob/main/docs/design/reproducible-build.md

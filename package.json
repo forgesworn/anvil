@@ -20,9 +20,12 @@
     "trusted-publishing",
     "reproducible-builds",
     "supply-chain-security",
+    "security",
     "provenance",
     "slsa",
     "release",
-    "publish"
+    "publish",
+    "ci",
+    "semver"
   ]
 }

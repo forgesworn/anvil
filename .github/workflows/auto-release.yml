@@ -45,6 +45,15 @@ on:
         description: Determine version and changelog but do not commit, tag, or create a release
         type: string
         default: 'false'
+    secrets:
+      GH_TOKEN:
+        description: |
+          Optional GitHub App token or PAT with contents: write scope.
+          If provided, the push and GitHub Release creation will use this
+          token instead of the default GITHUB_TOKEN. Required if you want
+          the created Release to trigger release.yml automatically --
+          the default GITHUB_TOKEN cannot trigger further workflow runs.
+        required: false
 
 jobs:
   determine:
@@ -106,9 +115,9 @@ jobs:
           fetch-depth: 0
           # Default GITHUB_TOKEN can push but cannot trigger further
           # workflow runs. If the consumer wants the push to trigger
-          # release.yml, they must pass a PAT or GitHub App token via
-          # secrets. See README "Auto mode" section.
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # release.yml, they pass a PAT or GitHub App token via the
+          # GH_TOKEN secret. See README "Auto" version strategy section.
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         run: |
@@ -202,7 +211,7 @@ jobs:
         env:
           NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
           CHANGELOG: ${{ needs.determine.outputs.changelog }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           gh release create "v${NEXT_VERSION}" \
             --title "v${NEXT_VERSION}" \

@@ -1,0 +1,455 @@
+# forgesworn/anvil
+
+> Forge-hardened release tool for JS/TS libraries. Multi-runner
+> reproducible-build attestation, OIDC trusted publishing, SLSA
+> provenance, pre-publish secret scan, exports-map check, frozen-vector
+> gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1600
+> lines, auditable in thirty minutes.
+
+## What this is
+
+A GitHub Action (reusable workflow + composite fallback) that publishes
+npm packages with hard pre-publish gates. Zero dependencies, pure bash,
+auditable in thirty minutes.
+
+The flagship feature: two parallel CI builds on independent runners must
+produce byte-identical tarballs, or the release is blocked. No other
+JS release tool offers this today.
+
+## Who it's for
+
+Any JavaScript/TypeScript library author who publishes to npm and wants
+a release pipeline with fewer moving parts than the library it ships.
+Especially useful for libraries where a compromised publish would matter
+-- authentication, payments, cryptography, infrastructure -- but the
+gates are valuable for any package.
+
+If you want your CI to decide the version number for you,
+semantic-release or release-please will serve you better.
+This tool is for authors who want to make that call themselves
+(or use the auto-release.yml companion for zero-dep commit-driven automation).
+
+## Quick start (reusable workflow)
+
+Five-line caller workflow in your library's `.github/workflows/release.yml`:
+
+```yaml
+name: release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+```
+
+Then:
+
+1. Configure npm trusted publishing on npmjs.com for YOUR repo and YOUR
+   caller workflow file (not forgesworn/anvil). See "Trusted publisher
+   setup" below.
+2. Bump package.json version and add a CHANGELOG.md entry.
+3. Commit, tag (v1.2.3), push, and create a GitHub Release for the tag.
+
+Libraries with frozen test vectors can add a gate:
+
+```yaml
+    with:
+      vector-test-command: npm run test:vectors
+```
+
+## Version strategies
+
+### Manual (default)
+
+You bump package.json, write the CHANGELOG entry, tag, and create a
+GitHub Release. The action verifies the tag matches and runs all gates.
+
+### Verify
+
+You still bump manually, but the action parses conventional commits
+and fails the release if your bump is smaller than what the commits
+imply. A feat: commit with only a patch bump is caught.
+
+```yaml
+    with:
+      version-strategy: verify
+```
+
+### Auto (companion workflow)
+
+The auto-release.yml companion workflow replaces semantic-release
+entirely. It runs on push to main, parses conventional commits,
+determines the bump, updates package.json and CHANGELOG.md, tags,
+and creates a GitHub Release -- which triggers the main release pipeline.
+
+```yaml
+name: auto-release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  auto-release:
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+```
+
+Keep your existing release.yml (the publish pipeline) alongside it.
+
+Note: the default GITHUB_TOKEN can create releases but cannot trigger
+further workflow runs. If you need the auto-created release to trigger
+release.yml automatically, use a GitHub App token or PAT with
+contents: write scope. Set this as a repo secret and reference it in
+the caller workflow's `secrets: inherit` or pass it as a named secret.
+
+## Architecture
+
+The reusable workflow runs as a four-job DAG:
+
+```
+   build-a ──────┐
+   (full gates +  │
+    record)       ├──> reproduce ──> publish
+   build-b ──────┘    (compare      (publish-npm,
+   (build +           sha256s)       publish-jsr,
+    record)                          update-release)
+```
+
+### build-a (all gates)
+
+1. Checkout your repo and this action at the pinned SHA
+2. Setup Node with OIDC registry configured
+3. verify-action-pins -- scan workflows for unpinned uses: refs
+4. npm ci
+5. npm run build --if-present
+6. verify-tag -- git tag matches package.json version
+7. verify-bump -- (only with version-strategy: verify) checks commits
+8. run-tests -- full test suite (npm test by default)
+9. verify-vectors -- frozen-vector gate (skipped if not configured)
+10. verify-audit -- npm audit --omit=dev (runtime deps only)
+11. verify-exports -- every exports subpath exists on disk
+12. verify-secrets -- grep dist/ and files paths for secret markers
+13. record-tarball -- npm pack with normalised mtimes, hash, write meta
+
+### build-b (parallel build)
+
+Same checkout, setup, npm ci, build, record-tarball on a second runner.
+No gates -- only build and pack.
+
+### reproduce
+
+Downloads both tarball metas and compares sha256s. Under strict mode
+(default), a mismatch blocks the release. Under warn mode, it logs and
+continues. Under off mode, build-b and reproduce are skipped entirely.
+
+### publish
+
+Downloads the canonical tarball from build-a and runs:
+- publish-npm -- idempotent npm publish via OIDC
+- publish-jsr -- only if jsr.json exists
+- update-release -- CHANGELOG extraction, integrity block, asset upload
+
+## Step scripts
+
+All in steps/, all bash, all sourcing lib.sh for shared helpers:
+
+| Script | Purpose |
+|---|---|
+| verify-tag.sh | Git tag matches package.json version |
+| verify-bump.sh | Conventional commits match version bump (verify mode) |
+| run-tests.sh | Full test suite |
+| verify-vectors.sh | Frozen-vector gate |
+| verify-audit.sh | npm audit --omit=dev |
+| verify-exports.sh | Every exports subpath exists on disk |
+| verify-secrets.sh | Secret scan over pack set |
+| verify-action-pins.sh | Warn/fail on unpinned uses: in workflows |
+| normalise-mtimes.sh | Touch all files to SOURCE_DATE_EPOCH |
+| record-tarball.sh | npm pack, hash, write tarball.meta |
+| compare-tarball-meta.sh | Reproducibility gate (compare two metas) |
+| publish-npm.sh | Publish the exact recorded tarball via OIDC |
+| publish-jsr.sh | JSR publish if jsr.json exists |
+| update-release.sh | CHANGELOG extraction, integrity block, asset upload |
+| changelog-extract.sh | Parse CHANGELOG.md for the version section |
+| parse-commits.sh | Parse conventional commits for auto-release |
+| lib.sh | Shared helpers (header, log, warn, die, require_cmds) |
+
+## Inputs (reusable workflow)
+
+| Input | Default | Purpose |
+|---|---|---|
+| node-version | 24.11.0 | Node version (must ship npm >= 11.5.x for OIDC) |
+| registry-url | https://registry.npmjs.org | npm registry URL |
+| test-command | npm test | Full test suite command |
+| vector-test-command | (empty) | Frozen-vector gate command (skip if empty) |
+| changelog-file | CHANGELOG.md | Path to changelog |
+| package-json | package.json | Path to package.json |
+| audit-level | low | npm audit threshold (low/moderate/high/critical) |
+| version-strategy | manual | manual: you bump and tag; verify: also checks conventional commits |
+| reproducibility-mode | strict | strict: block on mismatch; warn: log only; off: skip build-b |
+| strict-action-pins | true | Fail on unpinned uses: refs in consumer workflows |
+| dry-run | false | Skip real publish |
+| debug | false | Diagnostic logging for OIDC issues |
+
+Secrets:
+
+| Secret | When needed |
+|---|---|
+| JSR_TOKEN | Only if jsr.json exists. JSR does not yet support OIDC. |
+
+## Composite action (alternative)
+
+For consumers who need custom job structure, the composite action
+bypasses the reusable workflow:
+
+```yaml
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: forgesworn/anvil@v0
+        with:
+          vector-test-command: npm run test:vectors
+```
+
+The composite action does NOT include the reproducible-build gate
+(build-b and reproduce jobs). It accepts the same inputs as the
+reusable workflow except reproducibility-mode.
+
+## Trusted publisher setup
+
+npm's trusted publisher matches against the OIDC token's workflow_ref
+claim -- the caller workflow, not the reusable workflow.
+
+Configure on npmjs.com -> your package -> Settings -> Trusted Publisher:
+
+| Field | Value |
+|---|---|
+| Publisher | GitHub Actions |
+| Organization or user | your GitHub org/user |
+| Repository | your package's repo (NOT forgesworn/anvil) |
+| Workflow filename | your caller workflow file (e.g. release.yml) |
+| Environment | (leave empty) |
+
+For the first publish of a brand-new package, you may need to create the
+package on npm first (npm publish --access public from a workstation with
+a granular access token), then configure trusted publishing for all
+subsequent releases.
+
+## Reproducible builds (detailed)
+
+The reusable workflow runs two independent builds in parallel on two
+GitHub Actions runners. Both pack the artefact with normalised mtimes
+and SOURCE_DATE_EPOCH derived from git log -1 --format=%ct.
+
+How it works:
+
+1. record-tarball.sh derives SOURCE_DATE_EPOCH from the git commit
+2. normalise-mtimes.sh touches all files (excluding node_modules/.git)
+   to that epoch
+3. npm pack --json produces the tarball
+4. sha256 computed via shasum -a 256
+5. sha512 integrity extracted from npm pack --json output
+6. tarball.meta written with filename, size, sha256, integrity
+
+The reproduce job downloads both metas and compares sha256s. On match,
+the GitHub Release body gains a "Reproducible build" badge. On
+mismatch (strict mode), the release is blocked with both hashes printed
+and a tar-listing diff showing which files drifted.
+
+Common non-determinism sources: Date.now() in build output, sorted-by-fs
+globs, random IDs in build scripts, host paths in source maps.
+
+Limitations:
+- Single OS only (ubuntu-24.04). Cross-OS is not in scope.
+- Two-run sample size. Probabilistic non-determinism may not show.
+- SOURCE_DATE_EPOCH is opt-in for build tools. Belt-and-braces mtime
+  normalisation closes the file-stamp gap but embedded timestamps in
+  compiled output are the consumer's bug to fix.
+
+## Exports-map check (detailed)
+
+verify-exports.sh catches the "deleted src/foo.ts but forgot to update
+exports" class of bug. Neither publint nor arethetypeswrong performs
+this file-existence check.
+
+What it validates:
+- Modern exports field: walks the entire .exports tree via jq, including
+  all conditional keys (import, require, types, node, browser, default),
+  nested conditionals, and string shorthand
+- Legacy entry points: main, module, types, typings, bin (both string
+  and object forms)
+- Deduplicates paths so each file is checked exactly once
+
+No configuration required. Runs automatically in build-a. If any
+exported path does not exist on disk, exit 1 and the release is blocked.
+
+## Runtime-only npm audit (detailed)
+
+verify-audit.sh runs npm audit --omit=dev so devDependency advisories
+do not block releases. Only production dependencies (those in
+"dependencies", not "devDependencies") are evaluated.
+
+The audit-level input (default: low) controls the severity threshold.
+For security-sensitive libraries, even low-severity runtime advisories
+are worth investigating before publishing.
+
+## Action-pin auditing (detailed)
+
+verify-action-pins.sh walks .github/workflows/*.yml in your repo and
+flags every uses: owner/repo@ref whose ref is not a 40-character hex
+SHA. Motivated by the tj-actions/changed-files March 2025 incident.
+
+Special cases:
+- Local actions (./ paths): skipped
+- forgesworn/anvil: self-exempt to avoid circular failure
+- Docker references: checks for sha256: digest pinning
+
+strict-action-pins (default: true) controls whether unpinned refs
+block the release or only warn.
+
+## Secret scan (detailed)
+
+verify-secrets.sh scans the publish pack set (dist/ plus any paths in
+package.json "files") for:
+- Forbidden filenames: .env, id_rsa, *.pem, etc.
+- Secret content patterns: PEM private key blocks, Nostr nsec1,
+  AWS/GitHub/Slack tokens
+
+Known limitations:
+- Content scans skip .md/.txt/.rst/.adoc files (crypto libraries
+  legitimately include example secret-shaped strings in docs)
+- Scan roots come from package.json "files" plus dist/. Libraries
+  without explicit "files" may have a scan gap. Recommendation:
+  always declare an explicit "files" array.
+
+## Tarball integrity stamping
+
+After all gates pass, the GitHub Release body is updated with:
+
+```
+## Artefact integrity
+
+file:      my-package-1.2.0.tgz
+size:      12345 bytes
+sha256:    abc123...
+sha512-base64...
+
+Verify against the registry tarball:
+
+curl -sLO https://registry.npmjs.org/my-package/-/my-package-1.2.0.tgz
+shasum -a 256 my-package-1.2.0.tgz
+```
+
+The tarball is also uploaded as a GitHub Release asset. Consumers have
+two independent sources for the bytes (npm + GitHub Releases).
+
+On a clean re-run, publish-npm fetches the registry's dist.integrity
+and compares to the local recorded value. Match = silent skip.
+Mismatch = loud failure (registry tarball substitution alarm).
+
+## CHANGELOG format
+
+The extractor is intentionally loose. Matches the first heading (H1/H2/H3)
+containing the version string and a dotted numeric pattern. Capture
+continues until the next version heading. Works with Keep a Changelog
+format and semantic-release's format.
+
+## Troubleshooting
+
+### OIDC token exchange error
+
+If npm publish fails with "OIDC token exchange error - package not found",
+the trusted publisher is configured for the wrong repo. Change the
+Repository field on npmjs.com to your package's own repo.
+
+If that doesn't fix it, add debug: true to your caller workflow and
+re-run. The diagnostic step dumps npm version, redacted .npmrc, OIDC
+env var presence, and npm config list.
+
+### Reproducible build failure
+
+Common causes printed in the failure message:
+- Date.now() in build output (use a constant or SOURCE_DATE_EPOCH)
+- Glob order varying between runners (sort explicitly)
+- Random IDs in build scripts (seed or remove)
+- Host paths in source maps (use relative paths)
+
+Set reproducibility-mode: warn to unblock while investigating.
+
+### First publish of a new package
+
+OIDC trusted publishing requires the package to already exist on npm.
+For brand-new packages, do a one-time manual publish first:
+npm publish --access public (with a granular access token), then
+configure trusted publishing for subsequent releases.
+
+## Threat model summary
+
+Defends against:
+- Compromised NPM_TOKEN (OIDC replaces long-lived tokens)
+- Malicious release-tooling devDependencies (zero deps)
+- Accidental publish of wrong version (verify-tag)
+- Secrets in artefacts (verify-secrets)
+- Broken frozen protocol outputs (verify-vectors)
+- Exports/files drift (verify-exports)
+- Runtime dep advisories (verify-audit)
+- Tag-mutation supply-chain attacks (verify-action-pins)
+- Non-deterministic builds masking regressions (reproduce gate)
+- Registry tarball substitution (integrity comparison on re-run)
+
+Does NOT defend against:
+- Malicious maintainer
+- Compromised GitHub
+- Compromised npm registry
+- Build-time exploit via consumer devDependencies
+
+Full threat model: https://github.com/forgesworn/anvil/blob/main/THREAT-MODEL.md
+
+## Comparison with alternatives
+
+| | anvil | semantic-release | changesets | release-please | release-it | np |
+|---|---|---|---|---|---|---|
+| Dependencies | 0 | 28 direct | 26 direct | n/a | 23 direct | 36 direct |
+| OIDC publishing | required | optional | no | no | optional | no |
+| Reproducible builds | yes (two-runner) | no | no | no | no | no |
+| Secret scan | yes | no | no | no | no | no |
+| Exports check | yes | no | no | no | no | no |
+| Monorepo | no | via plugins | native | yes | via plugins | no |
+| Runtime | bash (CI) | Node.js | Node.js | TypeScript (CI) | Node.js | Node.js |
+
+When NOT to use anvil:
+- Monorepo -> use changesets
+- Large plugin ecosystem needed -> use semantic-release
+- Publish from laptop -> use np
+- GitLab -> use release-it
+- PR review gate before bumps -> use release-please
+
+## Supported registries
+
+| Registry | Status | Notes |
+|---|---|---|
+| npm | supported | OIDC trusted publishing, provenance on every publish |
+| JSR | supported | Opt-in via jsr.json, uses JSR_TOKEN (no OIDC yet) |
+
+## Links
+
+- Source: https://github.com/forgesworn/anvil
+- README: https://github.com/forgesworn/anvil/blob/main/README.md
+- Threat model: https://github.com/forgesworn/anvil/blob/main/THREAT-MODEL.md
+- Comparison: https://github.com/forgesworn/anvil/blob/main/docs/comparison.md
+- Design doc (reproducible builds): https://github.com/forgesworn/anvil/blob/main/docs/design/reproducible-build.md
+- Migration from semantic-release: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-semantic-release.md
+- Migration from changesets: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-changesets.md
+- Migration from release-please: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-release-please.md
+- Migration from release-it: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-release-it.md
+- Migration from np: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-np.md
+- Migration from v0.3: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-v0.3.md
+- Pre-publish gates reference: https://github.com/forgesworn/anvil/blob/main/docs/pre-publish-gates.md
