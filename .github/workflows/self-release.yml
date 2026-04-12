@@ -1,0 +1,164 @@
+# Dogfood: release-action releases itself using its own scripts.
+#
+# On every push to main, parse-commits.sh determines if a release is
+# warranted from conventional commits. If so, bump package.json,
+# update CHANGELOG, tag, create GitHub Release, and advance the major
+# version tag (v0) so consumers pinned to @v0 get the update.
+#
+# The default GITHUB_TOKEN cannot trigger further workflow runs, so
+# the chore(release) push will not re-trigger this workflow.
+
+name: self-release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify action pins
+        env:
+          STRICT_ACTION_PINS: '1'
+        run: ./steps/verify-action-pins.sh
+
+  determine:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      bump: ${{ steps.parse.outputs.bump }}
+      next_version: ${{ steps.parse.outputs.next_version }}
+      changelog: ${{ steps.parse.outputs.changelog }}
+      should_release: ${{ steps.decide.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Parse conventional commits
+        id: parse
+        run: ./steps/parse-commits.sh
+
+      - name: Decide whether to release
+        id: decide
+        env:
+          BUMP: ${{ steps.parse.outputs.bump }}
+          NEXT_VERSION: ${{ steps.parse.outputs.next_version }}
+        run: |
+          if [[ "$BUMP" == "none" ]]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "No releasable commits since last tag."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Release warranted: ${BUMP} bump -> ${NEXT_VERSION}"
+          fi
+
+  release:
+    needs: [gate, determine]
+    if: needs.determine.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump package.json
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+        run: |
+          tmp="$(mktemp)"
+          jq --arg v "$NEXT_VERSION" '.version = $v' package.json > "$tmp"
+          mv "$tmp" package.json
+          echo "Bumped package.json to $NEXT_VERSION"
+
+      - name: Update CHANGELOG
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          CHANGELOG: ${{ needs.determine.outputs.changelog }}
+        run: |
+          date_today="$(date -u +%Y-%m-%d)"
+          heading="## ${NEXT_VERSION} (${date_today})"
+
+          if [[ ! -f CHANGELOG.md ]]; then
+            {
+              echo "# Changelog"
+              echo ""
+              echo "$heading"
+              echo ""
+              echo "$CHANGELOG"
+            } > CHANGELOG.md
+          else
+            tmp="$(mktemp)"
+            inserted=false
+            while IFS= read -r line; do
+              echo "$line" >> "$tmp"
+              if ! $inserted && [[ "$line" =~ ^#\  ]]; then
+                {
+                  echo ""
+                  echo "$heading"
+                  echo ""
+                  echo "$CHANGELOG"
+                } >> "$tmp"
+                inserted=true
+              fi
+            done < CHANGELOG.md
+
+            if ! $inserted; then
+              {
+                echo "$heading"
+                echo ""
+                echo "$CHANGELOG"
+                echo ""
+                cat CHANGELOG.md
+              } > "$tmp"
+            fi
+
+            mv "$tmp" CHANGELOG.md
+          fi
+
+      - name: Commit, tag, and push
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+        run: |
+          git add package.json CHANGELOG.md
+          git commit -m "chore(release): ${NEXT_VERSION}"
+          git tag "v${NEXT_VERSION}"
+          git push origin HEAD --follow-tags
+
+      - name: Create GitHub Release
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          CHANGELOG: ${{ needs.determine.outputs.changelog }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${NEXT_VERSION}" \
+            --title "v${NEXT_VERSION}" \
+            --notes "$CHANGELOG" \
+            --target "$(git rev-parse HEAD)"
+
+      - name: Update major version tag
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+        run: |
+          major="${NEXT_VERSION%%.*}"
+          git tag -f "v${major}" HEAD
+          git push origin "v${major}" --force
