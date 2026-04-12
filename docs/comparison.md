@@ -18,7 +18,7 @@ consider for release automation. Updated 2026-04.
 | Secret scan | yes | no | no | no | no | no |
 | Exports map verification | yes | no | no | no | no | no |
 | Action-pin auditing | yes | no | no | no | no | no |
-| Monorepo support | no (v0.x) | via plugins | **native** | yes | via plugins | no |
+| Monorepo support | no (single-package by design) | via plugins | **native** | yes | via plugins | no |
 | Runtime | bash (CI only) | Node.js | Node.js | TypeScript (CI) | Node.js | Node.js (local) |
 | Auditable in 30 minutes | yes (~1400 lines) | no (~28 deps) | no (~26 deps) | no | no (~23 deps) | no (~36 deps) |
 
@@ -32,34 +32,35 @@ and publishes. Fully automatic. 28 direct dependencies, hundreds
 transitive.
 
 **What semantic-release does better:**
-- Fully automatic pipeline: push to main and walk away
-- Enormous ecosystem: plugins for Slack, backmerge, custom analysers
 - Huge community: answers on StackOverflow, tutorials everywhere
-- Multi-branch release strategies (beta, next, maintenance)
 
 **What release-action does better:**
-- Zero dependencies in the consumer repo (vs ~500 transitive)
+- Same push-to-main automation via `auto` mode, zero dependencies
+  (vs ~500 transitive in semantic-release)
 - Reproducible-build attestation (no other tool offers this)
 - Secret scanning, exports verification, action-pin auditing
 - OIDC trusted publishing required by default (not optional)
 - SLSA provenance on every publish (not opt-in)
 - Auditable: ~1400 lines of bash vs opaque dependency tree
-- Version decisions are explicit, not derived from commit prefixes
+- `verify` mode: you pick the version, the tool catches mistakes.
+  No equivalent in semantic-release.
 
 **The version-from-commits problem:**
 semantic-release derives your public API contract from commit message
 prefixes. One contributor writes `feat:` instead of `fix:` and you
 ship a minor instead of a patch. The tool provides no way to override
-this without editing commit history. release-action's `verify` mode
-offers a middle ground: you decide the version, the tool verifies it's
-consistent with your commits.
+this without editing commit history. release-action gives you three
+options: `manual` (you decide everything), `verify` (you decide but
+the tool catches undersized bumps), or `auto` (same commit-driven
+automation, zero dependencies).
 
 **Who should switch:**
-Library authors who care about supply-chain hygiene more than
-automation convenience. If you've never been burned by an automated
-version bump, semantic-release is fine. If you have, or if your
-consumers audit your dependency tree, release-action removes the
-entire release-tooling attack surface.
+Anyone who wants the same push-to-main automation without adding ~500
+transitive dependencies to their repo. `auto` mode gives you the
+same workflow. `verify` mode gives you something semantic-release
+can't: manual version control with automated consistency checking.
+If your consumers audit your dependency tree, release-action removes
+the entire release-tooling attack surface.
 
 **Migration effort:** Low. See
 [`docs/migration-from-semantic-release.md`](migration-from-semantic-release.md).
@@ -88,15 +89,15 @@ killer feature.
 - Supply-chain gates that changesets doesn't offer
 
 **The monorepo gap:**
-This is the main reason to choose changesets today. release-action
-does not support monorepos in v0.x. If you have a monorepo with
-inter-package dependencies, changesets handles that natively.
-release-action requires one workflow per package.
+This is the main reason to choose changesets today. release-action is
+single-package by design. If you have a monorepo with inter-package
+dependencies, changesets handles that natively. release-action
+requires one workflow per package.
 
 **Who should switch:**
 Single-package library authors who use changesets but find the
 changeset file ceremony excessive. Monorepo users should stay on
-changesets until release-action adds monorepo support.
+changesets.
 
 **Migration effort:** Low-medium. Remove `.changeset/` config, delete
 changeset files, add the caller workflow. See
@@ -226,10 +227,9 @@ This is where release-action's differentiation is clearest.
 
 Be honest about the gaps:
 
-- **You need monorepo support today.** Use changesets.
-- **You want fully automated releases with zero human input.**
-  Use semantic-release. (release-action's `auto` mode gets close
-  but is newer and less battle-tested.)
+- **You have a monorepo.** Use changesets.
+- **You need a large plugin ecosystem** (Slack, backmerge, custom
+  analysers). Use semantic-release.
 - **You publish from your laptop and prefer it that way.** Use np.
 - **You use GitLab, not GitHub.** Use release-it.
 - **You need the PR-review gate before version bumps.** Use

@@ -2,8 +2,8 @@
 
 If you are moving a single-package TypeScript library off `@changesets/cli`
 and onto `forgesworn/release-action`, this is the diff. Monorepo users:
-release-action does not support monorepos in v0.x. Stay on changesets
-until it does, or split your packages into separate repos.
+release-action is single-package by design. Stay on changesets, or
+split your packages into separate repos.
 
 ## Before you start
 

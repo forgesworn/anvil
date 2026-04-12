@@ -120,8 +120,7 @@ add GitHub Actions:
   tag yourself, and the action handles the rest.
 - Multi-language support. release-please handles Java, Python, Go, Rust,
   etc. release-action is JS/TS only.
-- Monorepo manifest mode. release-action does not support monorepos in
-  v0.x.
+- Monorepo manifest mode. release-action is single-package by design.
 
 ## What you gain
 
