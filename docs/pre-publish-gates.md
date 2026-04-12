@@ -139,6 +139,107 @@ automatically in the build-a job.
 
 ---
 
+## SLSA provenance (publish-npm.sh)
+
+Every package published through anvil carries SLSA provenance
+attestations, proving the build originated from a specific GitHub
+Actions workflow run on a specific commit. This is powered by npm's
+built-in Sigstore integration and GitHub's OIDC identity provider.
+
+### How provenance works
+
+1. The caller workflow declares `permissions: id-token: write`, which
+   allows GitHub Actions to mint an OIDC token for the run.
+2. `actions/setup-node` configures the npm registry URL, enabling npm's
+   OIDC-aware publish flow.
+3. `publish-npm.sh` runs `npm publish --access public $tarball_path`.
+   npm detects the OIDC environment, exchanges the GitHub OIDC token
+   for a short-lived Sigstore signing certificate, signs the package,
+   and attaches the provenance attestation to the registry entry.
+4. The registry records the attestation, linking the published bytes
+   to the GitHub Actions workflow run, commit SHA, and repository.
+
+### Configuration
+
+Two things are required in your library:
+
+**1. package.json** -- set `publishConfig.provenance`:
+
+```json
+{
+  "publishConfig": {
+    "provenance": true
+  }
+}
+```
+
+**Important**: do NOT pass `--provenance` as a CLI flag. npm 11.6+
+short-circuits to `ENEEDAUTH` when `--provenance` is passed explicitly,
+breaking the OIDC token exchange entirely. Use `publishConfig` instead.
+
+**2. Caller workflow** -- ensure OIDC permissions:
+
+```yaml
+permissions:
+  contents: write   # update Release bodies + upload tarball asset
+  id-token: write   # OIDC trusted publishing + provenance signing
+```
+
+The reusable workflow (`forgesworn/anvil/.github/workflows/release.yml`)
+bakes these permissions in. If using the composite action directly, you
+must set them yourself.
+
+### Verifying provenance as a consumer
+
+**On npmjs.com**: navigate to the package page. Packages with provenance
+show a green "Provenance" badge linking to the source commit and
+workflow run.
+
+**Via the CLI**:
+
+```sh
+npm audit signatures
+```
+
+This checks that every package in your `node_modules` has a valid
+registry signature and, where present, a valid provenance attestation.
+
+**Via the npm registry API**:
+
+```sh
+# Fetch attestations for a specific version
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/my-package@1.2.0 | jq .
+```
+
+The response includes the Sigstore bundle with the signing certificate,
+transparency log entry, and the SLSA predicate linking the package to
+its source.
+
+### Troubleshooting
+
+**`OIDC token exchange error - package not found`**: the trusted
+publisher on npmjs.com is configured for the wrong repository. It must
+point at YOUR repo and YOUR caller workflow, not at forgesworn/anvil.
+
+**`ENEEDAUTH` or `npm ERR! need auth`**: likely caused by passing
+`--provenance` as a CLI flag with npm >= 11.6. Remove the flag and use
+`publishConfig.provenance: true` in package.json instead.
+
+**No provenance badge on npmjs.com**: check that `publishConfig.provenance`
+is set to `true` in package.json (not just truthy). Also verify that
+`id-token: write` is in the caller workflow's permissions.
+
+**`npm audit signatures` reports unsigned packages**: provenance only
+applies to packages published with OIDC. Older versions published with
+a long-lived `NPM_TOKEN` will not have attestations. Only versions
+published through anvil (or any OIDC-enabled flow) carry provenance.
+
+Add `debug: true` to your caller workflow's `with:` block to dump npm
+version, redacted `.npmrc`, OIDC environment variable presence, and
+`npm config list`.
+
+---
+
 ## Tarball hash stamping (record-tarball.sh + update-release.sh)
 
 After all pre-publish gates pass and the package is published to npm,
@@ -159,33 +260,91 @@ Releases) and a way to verify they match.
 6. Writes all metadata to `tarball.meta` as key=value lines:
    `filename`, `path`, `size`, `unpacked_size`, `sha256`, `integrity`
 
+Core implementation:
+
+```bash
+# Derive SOURCE_DATE_EPOCH from git commit time
+SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+export SOURCE_DATE_EPOCH
+
+# Normalise all file mtimes for reproducibility
+find . -exec touch -t "$(date -d "@$SOURCE_DATE_EPOCH" '+%Y%m%d%H%M.%S')" {} +
+
+# Pack and extract metadata
+pack_json="$(npm pack --pack-destination "$meta_dir" --json)"
+filename="$(printf '%s' "$pack_json" | jq -r '.[0].filename')"
+integrity="$(printf '%s' "$pack_json" | jq -r '.[0].integrity')"
+size="$(printf '%s' "$pack_json" | jq -r '.[0].size')"
+
+# Compute sha256
+sha256="$(shasum -a 256 "$meta_dir/$filename" | awk '{print $1}')"
+
+# Write tarball.meta (consumed by update-release.sh and compare-tarball-meta.sh)
+printf 'filename=%s\nsize=%s\nsha256=%s\nintegrity=%s\n' \
+  "$filename" "$size" "$sha256" "$integrity" > "$meta_dir/tarball.meta"
+```
+
 **Step 2 -- update-release.sh** (runs in the publish job, after npm
 publish succeeds):
 
-1. Extracts the CHANGELOG section for the released version
+1. Extracts the CHANGELOG section for the released version via
+   `changelog-extract.sh`
 2. Reads `tarball.meta` and appends an "Artefact integrity" block to
-   the GitHub Release body:
+   the GitHub Release body
+3. If the reproducible-build gate confirmed two independent builds
+   matched (`REPRODUCIBLE=1`), prepends a **Reproducible build** badge
+4. Uploads the `.tgz` tarball as a GitHub Release asset
 
-```
+Core implementation:
+
+```bash
+# Read metadata from tarball.meta
+while IFS='=' read -r key value; do
+  case "$key" in
+    filename)  filename="$value" ;;
+    size)      size="$value" ;;
+    sha256)    sha256="$value" ;;
+    integrity) integrity="$value" ;;
+  esac
+done < "$meta_dir/tarball.meta"
+
+# Build the integrity block appended to the release body
+integrity_block="
 ---
 
 ## Artefact integrity
 
-file:      my-package-1.2.0.tgz
-size:      12345 bytes
-sha256:    abc123...
-sha512-base64...
+\`\`\`
+file:      ${filename}
+size:      ${size} bytes
+sha256:    ${sha256}
+${integrity}
+\`\`\`
 
 Verify against the registry tarball:
 
-curl -sLO https://registry.npmjs.org/my-package/-/my-package-1.2.0.tgz
-shasum -a 256 my-package-1.2.0.tgz
+\`\`\`sh
+curl -sLO https://registry.npmjs.org/${name}/-/${basename}-${version}.tgz
+shasum -a 256 ${basename}-${version}.tgz
+\`\`\`
+"
+
+# Update the GitHub Release body (changelog notes + integrity block)
+gh release edit "$tag" --notes "${notes}${integrity_block}"
+
+# Upload the canonical tarball as a release asset
+gh release upload "$tag" "$tarball_path" --clobber
 ```
 
-3. If the reproducible-build gate confirmed two independent builds
-   matched, a **Reproducible build** badge is prepended above the block
-4. Uploads the `.tgz` tarball as a GitHub Release asset via
-   `gh release upload`
+### Output in the GitHub Release body
+
+The final release body contains three parts:
+
+1. The CHANGELOG section for this version (extracted from CHANGELOG.md)
+2. If reproducible: `**Reproducible build**: byte-identical output
+   verified across two independent CI runners.`
+3. The artefact integrity block with filename, size, sha256, sha512,
+   and a curl + shasum verification recipe
 
 ### Configuration
 
@@ -195,10 +354,28 @@ publish job succeeds.
 ### What consumers can verify
 
 Download the tarball from the npm registry and compare its sha256
-against the value stamped in the GitHub Release body. If the hashes
-match, the bytes on npm are the same bytes CI built. If the
-"Reproducible build" badge is present, those bytes were also confirmed
-identical across two independent CI runners.
+against the value stamped in the GitHub Release body:
+
+```sh
+curl -sLO https://registry.npmjs.org/my-package/-/my-package-1.2.0.tgz
+shasum -a 256 my-package-1.2.0.tgz
+# Compare output with sha256 in the GitHub Release "Artefact integrity" block
+```
+
+If the hashes match, the bytes on npm are the same bytes CI built. If
+the "Reproducible build" badge is present, those bytes were also
+confirmed identical across two independent CI runners.
+
+The tarball is also uploaded as a GitHub Release asset, giving consumers
+a second independent source. Compare both:
+
+```sh
+# From npm registry
+npm_sha=$(curl -sL https://registry.npmjs.org/my-package/-/my-package-1.2.0.tgz | shasum -a 256 | cut -d' ' -f1)
+# From GitHub Releases
+gh_sha=$(curl -sL https://github.com/owner/repo/releases/download/v1.2.0/my-package-1.2.0.tgz | shasum -a 256 | cut -d' ' -f1)
+[[ "$npm_sha" == "$gh_sha" ]] && echo "Match" || echo "MISMATCH"
+```
 
 On a clean re-run of an already-published release, `publish-npm`
 fetches the registry's `dist.integrity` and compares it to the recorded
