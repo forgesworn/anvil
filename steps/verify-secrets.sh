@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# verify-secrets.sh — pre-publish secret scan.
+# verify-secrets.sh -- pre-publish secret scan.
 #
 # Refuses to publish if a file matching a forbidden name or any file
-# containing a known secret-marker pattern is found anywhere inside the
-# packable artefacts (dist/ and any other files/directories listed in
-# package.json "files").
+# containing a known secret-marker pattern is found in the pack set.
 #
-# Pattern list is inline and deliberately small — every addition is a
+# The pack set is derived from `npm pack --dry-run --json`, which is
+# the authoritative source of what npm will actually publish. This
+# avoids reimplementing npm's files/glob/ignore semantics and ensures
+# we scan exactly the files that would end up in the tarball.
+#
+# Pattern list is inline and deliberately small -- every addition is a
 # trade-off between false positives blocking real releases and true
-# positives leaking real secrets. Keep conservative; a consuming repo can
-# add its own pre-step if it needs stricter rules.
+# positives leaking real secrets. Keep conservative; a consuming repo
+# can add its own pre-step if it needs stricter rules.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -17,36 +20,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 header "verify-secrets"
-require_cmds jq grep find
+require_cmds jq grep npm
 
 pkg="${PACKAGE_JSON:-package.json}"
 [[ -f "$pkg" ]] || die "$pkg not found"
 
-# Files/directories to scan = everything listed in package.json "files",
-# plus dist/ as a hard default (covers the common case).
-roots=()
-while IFS= read -r line; do
-  [[ -n "$line" ]] && roots+=("$line")
-done < <(
-  {
-    jq -r '.files[]? // empty' "$pkg"
-    echo "dist"
-  } | awk 'NF' | sort -u
-)
+# ---------------------------------------------------------------------------
+# Derive the pack set from npm itself
+# ---------------------------------------------------------------------------
 
-# Keep only those that exist on disk; error if none.
-existing_roots=()
-for r in "${roots[@]}"; do
-  [[ -e "$r" ]] && existing_roots+=("$r")
-done
-if (( ${#existing_roots[@]} == 0 )); then
-  die "no packable artefacts found on disk (checked: ${roots[*]})"
+# npm pack --dry-run --json outputs the file list npm would actually
+# publish. This is the single source of truth -- it respects "files",
+# ".npmignore", and all of npm's inclusion/exclusion rules.
+pack_json="$(npm pack --dry-run --json 2>/dev/null)" \
+  || die "npm pack --dry-run --json failed"
+
+# Extract file paths from the JSON output. npm pack --json returns an
+# array of objects, each with a "files" array containing { "path": ... }.
+pack_files=()
+while IFS= read -r f; do
+  [[ -n "$f" ]] && pack_files+=("$f")
+done < <(echo "$pack_json" | jq -r '.[0].files[].path // empty')
+
+if (( ${#pack_files[@]} == 0 )); then
+  die "npm pack reported no files -- nothing to scan"
 fi
 
-log "scanning: ${existing_roots[*]}"
+log "scanning ${#pack_files[@]} files from npm pack set"
 
-# Forbidden filenames (basename match). Expand carefully — every entry is
-# a decision we've made about what should never ship.
+# Forbidden filenames (basename match). Expand carefully -- every entry
+# is a decision we've made about what should never ship.
 forbidden_names=(
   ".env"
   ".env.local"
@@ -81,72 +84,66 @@ forbidden_patterns=(
 
 fail=0
 
-# Filename checks.
-for root in "${existing_roots[@]}"; do
-  if [[ -f "$root" ]]; then
-    # Single file — only the basename check applies.
-    base="$(basename "$root")"
-    for name in "${forbidden_names[@]}"; do
-      if [[ "$base" == "$name" ]]; then
-        warn "forbidden filename in packable artefacts: $root"
-        fail=1
-      fi
-    done
-    for glob in "${forbidden_globs[@]}"; do
-      # shellcheck disable=SC2053
-      if [[ "$base" == $glob ]]; then
-        warn "forbidden filename pattern ($glob): $root"
-        fail=1
-      fi
-    done
-    continue
-  fi
-  # Directory — recursive find.
+# ---------------------------------------------------------------------------
+# Filename checks against the actual pack set
+# ---------------------------------------------------------------------------
+
+for f in "${pack_files[@]}"; do
+  base="$(basename "$f")"
   for name in "${forbidden_names[@]}"; do
-    while IFS= read -r hit; do
-      warn "forbidden filename: $hit"
+    if [[ "$base" == "$name" ]]; then
+      warn "forbidden filename in pack set: $f"
       fail=1
-    done < <(find "$root" -type f -name "$name" 2>/dev/null)
+    fi
   done
   for glob in "${forbidden_globs[@]}"; do
-    while IFS= read -r hit; do
-      warn "forbidden filename pattern ($glob): $hit"
+    # shellcheck disable=SC2053
+    if [[ "$base" == $glob ]]; then
+      warn "forbidden filename pattern ($glob): $f"
       fail=1
-    done < <(find "$root" -type f -name "$glob" 2>/dev/null)
+    fi
   done
 done
 
-# Content checks. We grep each pattern across all files under the roots.
-# -I skips binary files; -r recurses; -E enables extended regex.
-#
+# ---------------------------------------------------------------------------
+# Content checks against files in the pack set
+# ---------------------------------------------------------------------------
+
 # Documentation file extensions are excluded because libraries legitimately
 # publish protocol docs and test vectors containing example secrets (e.g.
 # an nsec1 derived-key example in PROTOCOL.md). Filename-based checks above
 # still cover those (.env in dist/docs would still fail), so the leak-in-
 # source case is preserved.
-content_exclude_globs=(
-  '*.md'
-  '*.markdown'
-  '*.txt'
-  '*.rst'
-  '*.adoc'
+content_exclude_exts=(
+  md markdown txt rst adoc
 )
-grep_excludes=()
-for glob in "${content_exclude_globs[@]}"; do
-  grep_excludes+=(--exclude="$glob")
+
+# Build a filtered list of pack files to content-scan (excluding docs).
+content_files=()
+for f in "${pack_files[@]}"; do
+  ext="${f##*.}"
+  skip=false
+  for exclude_ext in "${content_exclude_exts[@]}"; do
+    if [[ "$ext" == "$exclude_ext" ]]; then
+      skip=true
+      break
+    fi
+  done
+  $skip || content_files+=("$f")
 done
 
 for pattern in "${forbidden_patterns[@]}"; do
-  while IFS= read -r hit; do
-    warn "forbidden content ($pattern): $hit"
-    fail=1
-  done < <(
-    grep -rEIl --binary-files=without-match "${grep_excludes[@]}" -- "$pattern" "${existing_roots[@]}" 2>/dev/null || true
-  )
+  for f in "${content_files[@]}"; do
+    [[ -f "$f" ]] || continue
+    if grep -qEI --binary-files=without-match -- "$pattern" "$f" 2>/dev/null; then
+      warn "forbidden content ($pattern): $f"
+      fail=1
+    fi
+  done
 done
 
 if (( fail )); then
-  die "secret scan found issues — refusing to publish"
+  die "secret scan found issues -- refusing to publish"
 fi
 
-ok "no forbidden filenames or content patterns found"
+ok "no forbidden filenames or content patterns found in ${#pack_files[@]} pack files"

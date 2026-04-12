@@ -10,8 +10,9 @@ deliberately short. The action is small and so is the migration.
 You need:
 
 - A library that already publishes to npm.
-- A CHANGELOG that humans update (or willingness to start). `release-action`
-  does not generate changelog entries. That is the point.
+- A CHANGELOG that humans update (or willingness to start), **unless** you
+  use `auto` mode which generates changelog entries from conventional commits.
+  See the README's "Version strategy" section.
 - Commit rights to the repo and publish rights to the package on npmjs.com.
 
 Read [the README's "Trusted publisher caveat" section](../README.md#trusted-publisher-caveat-important)
@@ -46,7 +47,8 @@ jobs:
 ```
 
 Drop the `vector-test-command` line if your library has no frozen test
-vectors. Crypto libraries should almost always set it.
+vectors. Libraries with deterministic test suites (crypto, codecs,
+serialisation) should almost always set it.
 
 ### 2. Remove the old release job from `ci.yml`
 
@@ -182,8 +184,14 @@ context at all or has it but cannot match the trusted publisher.
 
 ## What you give up
 
-- Automatic version bumping from commit messages. You bump manually.
-- Automatic CHANGELOG generation. You write entries by hand, or run a
-  helper script before you commit.
 - The psychological reassurance of a release tool with 597 transitive
   dependencies.
+
+That is genuinely it. If you liked the automatic versioning from
+commit messages, use `auto` mode -- add the companion
+`auto-release.yml` workflow alongside `release.yml` and you get the
+same behaviour with zero dependencies. If you want manual control
+with a safety net, use `version-strategy: verify` -- the action
+parses your conventional commits and fails if your bump is smaller
+than what the commits imply. See the README's "Version strategy"
+section for setup.

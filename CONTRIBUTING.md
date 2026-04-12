@@ -1,7 +1,7 @@
 # Contributing
 
 This action is deliberately small. The total bash surface area must
-stay under the thirty-minute audit budget (~1250 lines today). Before
+stay under the thirty-minute audit budget (~1600 lines today). Before
 adding a feature, ask whether it fits within the trust boundaries in
 [THREAT-MODEL.md](THREAT-MODEL.md) and whether the audit budget still
 holds after the addition.

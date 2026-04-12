@@ -1,11 +1,12 @@
 name: forgesworn-release
 description: >-
-  Cryptography-grade release tool for JS/TS libraries. Multi-runner
+  Supply-chain-hardened release tool for JS/TS libraries. Multi-runner
   reproducible-build attestation, OIDC trusted publishing, provenance,
-  secret scan, exports check, frozen-vector gate, action-pin auditing.
-  Pure bash, ~1250 lines, auditable in thirty minutes. NOTE: this
-  composite action does not include the reproducible-build gate (use
-  the reusable workflow at .github/workflows/release.yml for that).
+  secret scan, exports check, frozen-vector gate, action-pin auditing,
+  optional conventional-commit version verification. Zero dependencies,
+  pure bash, auditable in thirty minutes. NOTE: this composite action
+  does not include the reproducible-build gate (use the reusable
+  workflow at .github/workflows/release.yml for that).
 author: forgesworn
 
 branding:
@@ -42,9 +43,23 @@ inputs:
     required: false
     default: 'low'
   strict-action-pins:
-    description: If "true", verify-action-pins fails the release on any unpinned `uses:` reference in .github/workflows. Default warn-only. forgesworn/release-action is exempt by name.
+    description: >-
+      If "true" (the default), verify-action-pins fails the release on
+      any unpinned `uses:` reference in .github/workflows. Set to
+      "false" for warn-only mode. forgesworn/release-action is exempt
+      by name.
     required: false
-    default: 'false'
+    default: 'true'
+  version-strategy:
+    description: |
+      How version bumps are validated. One of:
+        - manual (default): you bump package.json and tag; the action
+          verifies the tag matches and publishes.
+        - verify: you bump manually, but the action parses conventional
+          commits and fails if your bump is smaller than what the commit
+          history implies (e.g. feat commits but only a patch bump).
+    required: false
+    default: 'manual'
   dry-run:
     description: If "true", skip the real publish (for smoke-testing)
     required: false
@@ -86,6 +101,14 @@ runs:
         PACKAGE_JSON: ${{ inputs.package-json }}
         GIT_TAG: ${{ github.event.release.tag_name }}
       run: ${{ github.action_path }}/steps/verify-tag.sh
+
+    - name: Verify bump matches commit history
+      if: ${{ inputs.version-strategy == 'verify' }}
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+        GIT_TAG: ${{ github.event.release.tag_name }}
+      run: ${{ github.action_path }}/steps/verify-bump.sh
 
     - name: Run tests
       shell: bash

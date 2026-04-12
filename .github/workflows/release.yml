@@ -88,10 +88,25 @@ on:
         type: string
         default: 'low'
       strict-action-pins:
-        description: If "true", verify-action-pins fails the release on any unpinned `uses:` reference in .github/workflows. Default warn-only. forgesworn/release-action is exempt by name.
+        description: >-
+          If "true" (the default), verify-action-pins fails the release on
+          any unpinned `uses:` reference in .github/workflows. Set to
+          "false" for warn-only mode. forgesworn/release-action is exempt
+          by name.
         required: false
         type: string
-        default: 'false'
+        default: 'true'
+      version-strategy:
+        description: |
+          How version bumps are validated. One of:
+            - manual (default): you bump package.json and tag; the action
+              verifies the tag matches and publishes.
+            - verify: you bump manually, but the action parses conventional
+              commits and fails if your bump is smaller than what the commit
+              history implies (e.g. feat commits but only a patch bump).
+        required: false
+        type: string
+        default: 'manual'
       reproducibility-mode:
         description: |
           Reproducible-build attestation mode. One of:
@@ -169,6 +184,10 @@ jobs:
 
       - name: Verify tag matches package.json
         run: $ACTION_SRC/steps/verify-tag.sh
+
+      - name: Verify bump matches commit history
+        if: ${{ inputs.version-strategy == 'verify' }}
+        run: $ACTION_SRC/steps/verify-bump.sh
 
       - name: Run tests
         env:

@@ -3,7 +3,7 @@
 > Cryptography-grade release tool for JS/TS libraries. Multi-runner
 > reproducible-build attestation, OIDC trusted publishing, SLSA
 > provenance, pre-publish secret scan, exports-map check, frozen-vector
-> gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1250
+> gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1600
 > lines, auditable in thirty minutes.
 
 ## What this is

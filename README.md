@@ -2,24 +2,21 @@
 
 [![CI](https://github.com/forgesworn/release-action/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/release-action/actions/workflows/ci.yml)
 
-In 2026, most Nostr and Bitcoin JavaScript libraries still publish
-with long-lived `NPM_TOKEN` secrets off a maintainer's workstation.
-The few that use OIDC use it with no release-time gates beyond
-"does the git tag match the `package.json` version". That is
-pre-2020 supply-chain hygiene for a category whose entire value
-proposition is trust.
+A release tool for JavaScript library authors who know what version
+they are shipping and want to be sure it ships clean.
 
-This is a release tool for cryptography libraries that fixes that.
-It bundles OIDC trusted publishing, SLSA provenance on every publish,
-a secret scan scoped to the actual publish pack set, an exports-map
-check that verifies every subpath exists on disk
+You bump `package.json` and write the CHANGELOG entry. The action
+handles everything else: OIDC trusted publishing, SLSA provenance on
+every publish, a secret scan scoped to the actual publish pack set,
+an exports-map check that verifies every subpath exists on disk
 ([`publint`](https://publint.dev/rules) explicitly skips this check;
 `arethetypeswrong` does type resolution, not file presence), a
-consumer-supplied frozen-vector gate, a runtime-only `npm audit` so
-devDep noise does not block releases, a warn-by-default audit of
-unpinned `uses:` references in the consumer's own workflows, **and a
-multi-runner reproducible-build attestation that publishes only when
-two independent CI builds produce byte-identical tarballs**.
+runtime-only `npm audit` so devDep noise does not block releases,
+a warn-by-default audit of unpinned `uses:` references in the
+consumer's own workflows, an optional frozen-vector gate for
+libraries with deterministic test suites, **and a multi-runner
+reproducible-build attestation that publishes only when two
+independent CI builds produce byte-identical tarballs**.
 
 That last one is the v0.4 flagship. None of `semantic-release`,
 `@changesets/cli`, `release-it`, `release-please`, or `np` offers it
@@ -29,48 +26,64 @@ independent sources for the bytes (npm registry + GitHub Releases) and
 can hash-compare against either.
 
 Pure `bash` + `jq` + `gh` + `npm`. No Node tooling in the action
-itself. ~1250 lines of bash across every step script. Auditable in
-under thirty minutes — a hard design constraint, not a slogan.
+itself. ~1600 lines of bash across every step script. Auditable in
+under thirty minutes -- a hard design constraint, not a slogan.
+
+## Who this is for
+
+- Library authors who already bump versions and write changelogs
+  manually and want a publish pipeline that does not make them nervous.
+- Projects that have outgrown `npm publish` from a workstation but do
+  not want 597 transitive devDependencies from a release tool.
+- Cryptography, authentication, payments, or any library where
+  consumers need to trust the bytes.
+- Anyone post-`xz-utils` or post-`tj-actions/changed-files` who
+  takes supply-chain surface area seriously.
+
+If you want your CI to decide the version number for you,
+`semantic-release` or `release-please` will serve you better.
+This tool is for authors who want to make that call themselves.
 
 ## Why this exists
 
-Two things are true about the JS/TS release tooling landscape in 2026.
-
-**One**: the dominant release tools — `semantic-release`, `changesets` —
+The dominant JS release tools -- `semantic-release`, `changesets` --
 bring hundreds of transitive devDependencies with them. For a CRUD app
-that is background noise. For a cryptography library whose entire value
-proposition is byte-identical output across implementations and time,
-it is a supply-chain surface area no crypto library author should
-accept.
+that is background noise. For any library where consumers need to
+trust the output, it is supply-chain surface area the author should
+not have to accept.
 
-**Two**: most crypto JS libraries already know this and have responded
-by not using release tooling at all. A quick survey of major Nostr
-and Bitcoin JS libraries as of 2026-04:
+`semantic-release` also decides your version number from commit
+message prefixes. That means your public API contract is driven by
+commit discipline rather than intent. One contributor writes `feat:`
+instead of `fix:` and you ship a minor bump instead of a patch. The
+alternative -- write your own changelog, bump your own version, let
+CI enforce everything else -- is what this action provides.
 
-- [`nbd-wtf/nostr-tools`](https://github.com/nbd-wtf/nostr-tools) —
+Many library authors already work this way, but without the safety
+net: manual `npm publish` off a workstation, long-lived `NPM_TOKEN`
+secrets, no provenance, no pre-publish gates. A quick survey of
+major Nostr and Bitcoin JS libraries (where supply-chain trust is
+table stakes) shows the pattern clearly:
+
+- [`nbd-wtf/nostr-tools`](https://github.com/nbd-wtf/nostr-tools) --
   no release workflow. Manual `npm publish` off a workstation.
-- [`bitcoinjs/bitcoinjs-lib`](https://github.com/bitcoinjs/bitcoinjs-lib) —
+- [`bitcoinjs/bitcoinjs-lib`](https://github.com/bitcoinjs/bitcoinjs-lib) --
   CI is test-only. Manual publish.
-- [`getAlby/js-sdk`](https://github.com/getAlby/js-sdk) — custom yarn
+- [`getAlby/js-sdk`](https://github.com/getAlby/js-sdk) -- custom yarn
   workflow with classic `NODE_AUTH_TOKEN`. No OIDC, no provenance.
-- `bitcoinerlab/secp256k1` — likely manual; workflows not public.
-- [`paulmillr/noble-hashes`](https://github.com/paulmillr/noble-hashes) —
+- `bitcoinerlab/secp256k1` -- likely manual; workflows not public.
+- [`paulmillr/noble-hashes`](https://github.com/paulmillr/noble-hashes) --
   the only one in the group using OIDC + SLSA provenance, via
   paulmillr's personal [`jsbt`](https://github.com/paulmillr/jsbt)
   reusable workflow. Tag/version match only. No secret scan, no
   exports-sanity check, no frozen-vector gate, no audit.
 
-One of those six uses OIDC trusted publishing. None use a secret
-scan. None use an exports-sanity check. None use a frozen-vector
-gate. This is what supply-chain hygiene looks like for a category
-whose customers are trusting the output to be byte-identical and
-the source to be sin-free.
-
-This action takes the `jsbt` pure-bash pattern and adds the gates
-crypto libraries actually care about, packaged as one reusable
-workflow any JS/TS library can adopt in five lines of caller
-workflow. It is deliberately positioned as community infrastructure,
-not as personal infra retroactively opened up.
+If crypto libraries with the strongest incentive to get this right
+are still publishing without gates, general-purpose libraries are
+doing no better. This action takes the `jsbt` pure-bash pattern and
+adds the gates any library author should want, packaged as one
+reusable workflow you can adopt in five lines of caller workflow.
+Community infrastructure, not personal infra retroactively opened up.
 
 ## Quick start (reusable workflow)
 
@@ -87,11 +100,15 @@ permissions:
 jobs:
   release:
     uses: forgesworn/release-action/.github/workflows/release.yml@v0
+```
+
+That is the whole caller workflow. No config files, no plugins.
+Libraries with frozen test vectors can add a gate:
+
+```yaml
     with:
       vector-test-command: npm run test:vectors
 ```
-
-That is the whole caller workflow. Five useful lines of `with:`.
 
 Then:
 
@@ -103,9 +120,71 @@ Then:
 3. Commit, tag (`v1.2.3`), push, and create a GitHub Release for the
    tag. The workflow takes over from there.
 
-Already using `semantic-release`? See
-[`docs/migration-from-semantic-release.md`](docs/migration-from-semantic-release.md)
-for the recipe distilled from the first pilot.
+Already using another release tool? See
+[`docs/comparison.md`](docs/comparison.md) for a full feature comparison,
+or jump straight to a migration guide:
+[semantic-release](docs/migration-from-semantic-release.md) |
+[changesets](docs/migration-from-changesets.md) |
+[release-please](docs/migration-from-release-please.md) |
+[release-it](docs/migration-from-release-it.md) |
+[np](docs/migration-from-np.md)
+
+## Version strategy
+
+Three modes for how version bumps are handled. Choose the one that
+matches your workflow.
+
+### Manual (default)
+
+You bump `package.json`, write the CHANGELOG entry, tag, and create a
+GitHub Release. The action verifies the tag matches and runs all gates.
+This is the quick-start workflow above.
+
+### Verify
+
+You still bump manually, but the action parses your conventional
+commits and **fails the release if your bump is smaller than what the
+commits imply**. A `feat:` commit with only a patch bump is caught.
+An intentional over-bump (e.g. major bump for a small fix) produces a
+warning but does not block.
+
+```yaml
+    with:
+      version-strategy: verify
+```
+
+This is the middle ground: you keep control, the action catches
+under-bumps that would ship breaking changes in a patch.
+
+### Auto
+
+The companion `auto-release.yml` workflow replaces `semantic-release`
+entirely. It runs on push, parses conventional commits, determines the
+bump, updates `package.json` and `CHANGELOG.md`, tags, and creates a
+GitHub Release -- which triggers the main release pipeline.
+
+Create `.github/workflows/auto-release.yml`:
+
+```yaml
+name: auto-release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  auto-release:
+    uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+```
+
+And keep your existing `release.yml` (the publish pipeline) alongside
+it. Push conventional commits to `main`; releases happen automatically
+when warranted. Zero dependencies, zero config files.
+
+**Note:** The default `GITHUB_TOKEN` can create releases but cannot
+trigger further workflow runs. If you need the auto-created release to
+trigger `release.yml` automatically, use a GitHub App token or PAT
+with `contents: write` scope.
 
 ## What the action does
 
@@ -126,21 +205,24 @@ In order:
 
 1. **Checkout** your repo and this action at the pinned SHA
 2. **Setup Node** with OIDC registry configured
-3. **verify-action-pins** — scan `.github/workflows/*.yml` for `uses:`
+3. **verify-action-pins** -- scan `.github/workflows/*.yml` for `uses:`
    lines that aren't 40-char SHA pinned. Warn-only by default; promote
    to hard-fail with `strict-action-pins: true`
 4. **`npm ci`**
 5. **`npm run build --if-present`**
-6. **verify-tag** — git tag matches `package.json` version
-7. **run-tests** — full test suite (`npm test` by default)
-8. **verify-vectors** — your configured frozen-vector command (skipped
-   if not set; crypto libraries should set this)
-9. **verify-audit** — `npm audit --omit=dev` — runtime deps only
-10. **verify-exports** — every subpath in `package.json` `"exports"` exists
+6. **verify-tag** -- git tag matches `package.json` version
+7. **verify-bump** -- (only when `version-strategy: verify`) parses
+   conventional commits and fails if the manual bump is smaller than
+   what the commit history implies
+8. **run-tests** -- full test suite (`npm test` by default)
+9. **verify-vectors** -- your configured frozen-vector command (skipped
+   if not set; any library with deterministic test vectors should set this)
+10. **verify-audit** -- `npm audit --omit=dev` -- runtime deps only
+11. **verify-exports** -- every subpath in `package.json` `"exports"` exists
     on disk
-11. **verify-secrets** — grep `dist/` (and any paths in `"files"`) for
+12. **verify-secrets** -- grep `dist/` (and any paths in `"files"`) for
     forbidden filenames and secret markers
-12. **record-tarball** — derive `SOURCE_DATE_EPOCH` from `git log`,
+13. **record-tarball** -- derive `SOURCE_DATE_EPOCH` from `git log`,
     normalise mtimes across the working tree, `npm pack` into a known
     location, parse the `--json` output for filename and sha512
     integrity, hash with sha256, write `tarball.meta` and upload it
@@ -148,7 +230,7 @@ In order:
 
 **`build-b`** runs in parallel on a separate runner: checkout, setup,
 `npm ci`, build, `record-tarball`, upload. Same `SOURCE_DATE_EPOCH`,
-same normalised mtimes, same pack — the resulting tarball must be
+same normalised mtimes, same pack -- the resulting tarball must be
 byte-identical.
 
 **`reproduce`** downloads both artifacts and runs **compare-tarball-meta**,
@@ -161,17 +243,17 @@ single-runner behaviour).
 
 **`publish`** downloads the canonical tarball from `build-a` and runs:
 
-13. **publish-npm** — idempotent `npm publish --access public` via OIDC,
+14. **publish-npm** -- idempotent `npm publish --access public` via OIDC,
     publishing the **exact** tarball downloaded above (so the bytes on
     the registry are the bytes the reproduce gate signed off on).
     Provenance is driven by `package.json` `publishConfig.provenance: true`
     rather than a CLI flag (npm 11.6+ short-circuits to `ENEEDAUTH`
     when `--provenance` is passed explicitly). On a clean re-run the
     registry's `dist.integrity` is compared to the recorded integrity:
-    match → silent skip, mismatch → loud failure (registry tarball
+    match -> silent skip, mismatch -> loud failure (registry tarball
     substitution alarm).
-14. **publish-jsr** — only if `jsr.json` exists in your repo
-15. **update-release** — updates the GitHub Release body from the
+15. **publish-jsr** -- only if `jsr.json` exists in your repo
+16. **update-release** -- updates the GitHub Release body from the
     matching `CHANGELOG.md` section, appends an *Artefact integrity*
     block containing tarball filename, size, sha256, sha512, and a
     `curl | shasum` recipe consumers can run to verify the registry
@@ -183,7 +265,7 @@ single-runner behaviour).
 If any gate fails, the workflow fails and nothing is published.
 
 The composite action (`action.yml`) does **not** include the
-reproduce job — composite actions are flat lists of steps inside one
+reproduce job -- composite actions are flat lists of steps inside one
 job and cannot define a multi-job DAG. The composite remains as an
 escape hatch for power users who need custom job structure; it ships
 with a strictly weaker guarantee (single-runner integrity anchor only,
@@ -200,10 +282,11 @@ no reproducibility check). Use the reusable workflow as the default.
 | `changelog-file` | `CHANGELOG.md` | Path to CHANGELOG |
 | `package-json` | `package.json` | Path to package.json |
 | `audit-level` | `low` | `npm audit` severity floor |
-| `strict-action-pins` | `false` | If `true`, **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Default warn-only. `forgesworn/release-action` is exempt by name. |
+| `version-strategy` | `manual` | One of `manual`, `verify`. `manual` is the default: you bump, you tag, the action publishes. `verify` parses conventional commits and fails if your bump is smaller than what the commits imply. For fully automatic versioning, use the companion `auto-release.yml` workflow instead. |
+| `strict-action-pins` | `true` | If `true` (the default), **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Set to `false` for warn-only mode. `forgesworn/release-action` is exempt by name. |
 | `reproducibility-mode` | `strict` | One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
-| `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors — see "Trusted publisher caveat". Does not print token values. |
+| `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors -- see "Trusted publisher caveat". Does not print token values. |
 
 ### Secrets
 
@@ -221,7 +304,7 @@ matching the first Markdown heading (H1, H2, or H3) that contains:
 
 Capture continues until the next version heading. Non-version headings
 like `### Features` or `### Bug Fixes` are passed through as content.
-This means you can freely mix heading levels — `semantic-release`'s
+This means you can freely mix heading levels -- `semantic-release`'s
 "H1 for minors, H2 for patches" quirk works fine.
 
 If you use [Keep a Changelog](https://keepachangelog.com) format, that
@@ -238,7 +321,7 @@ Under the default `reproducibility-mode: strict`, a mismatch is a
 hard failure: the release is blocked, both hashes are printed, and
 the diff between the two tar listings is dumped so the maintainer can
 see which file's mtime or content drifted. Common causes are listed
-in the failure message — `Date.now()` in build output, sorted-by-fs
+in the failure message -- `Date.now()` in build output, sorted-by-fs
 globs, random IDs in build scripts, host paths in source maps.
 
 Under `reproducibility-mode: warn` the mismatch is logged and the
@@ -253,8 +336,9 @@ When two builds match, the GitHub Release body gains a top line:
 This is a stronger claim than SLSA provenance. Provenance attests
 that *some* runner built these bytes *once*. The reproduce gate
 attests that **two** independent runners building the same commit
-arrive at the *same* bytes — the actual byte-identical-output property
-that crypto-library customers care about.
+arrive at the *same* bytes -- the actual determinism property that
+library consumers care about and that no other JS release tool
+verifies.
 
 ### Single-runner integrity anchor (sub-feature)
 
@@ -282,7 +366,7 @@ verify recipe:
 The same `.tgz` is also uploaded as a GitHub Release asset, so a
 consumer can fetch from either npm or GitHub Releases and hash-compare
 both against the same recorded sha256. Two independent sources for
-the bytes is strictly more valuable than one for a crypto library.
+the bytes is strictly more valuable than one.
 
 On a clean re-run of an already-published release, `publish-npm`
 fetches the registry's `dist.integrity` and compares it to the local
@@ -312,11 +396,10 @@ during the migration.
 ## Workflow pin auditing
 
 `verify-action-pins` walks `.github/workflows/*.yml` in **your** repo
-and emits a warning for every `uses: owner/repo@ref` line whose ref
-isn't a 40-character hex SHA. By default this is warn-only — adopting
-the action does not start failing your existing release on day one.
-Set `strict-action-pins: true` in your caller workflow to promote the
-warnings to a hard failure.
+and **fails the release** for every `uses: owner/repo@ref` line whose
+ref isn't a 40-character hex SHA. This is strict by default. Set
+`strict-action-pins: false` in your caller workflow for warn-only mode
+during migration.
 
 The reason is the [`tj-actions/changed-files` incident in March 2025](https://github.com/tj-actions/changed-files/issues/2464):
 a tag-pinned action can be silently re-pointed at malicious code by
@@ -336,7 +419,7 @@ enforcement works exactly as you'd expect. See
 ## Trusted publisher caveat (important)
 
 npm's trusted publisher matches against the OIDC token's **`workflow_ref`**
-claim — the **caller** workflow, not the reusable workflow.
+claim -- the **caller** workflow, not the reusable workflow.
 
 That means: when you use `forgesworn/release-action` via the reusable
 workflow pattern, your package's trusted publisher must be configured
@@ -353,7 +436,7 @@ Configure on npmjs.com → your package → Settings → Trusted Publisher:
 | Workflow filename | **your caller workflow file** (e.g. `release.yml`) |
 | Environment | (leave empty) |
 
-The reusable workflow still gets you centralised gate logic — one place
+The reusable workflow still gets you centralised gate logic -- one place
 to update tag-match, secret scan, exports sanity, frozen-vector check,
 runtime audit, etc., across every consumer. That's the real benefit.
 
@@ -361,7 +444,7 @@ What it does **not** give you is a single trusted-publisher record in
 `forgesworn/release-action` that every consumer points at. That pattern
 would require npm to match on `job_workflow_ref` (the reusable), which
 it doesn't today. Jordan Harband (npm contributor) has recommended
-against trusted publishing with reusable workflows for this reason — see
+against trusted publishing with reusable workflows for this reason -- see
 [`npm/documentation#1755`](https://github.com/npm/documentation/issues/1755).
 It still works fine; you just configure the trust at the consumer
 boundary rather than the reusable-workflow boundary.
@@ -379,7 +462,7 @@ Change the Repository field to your package's own repo.
 If that does not fix it, add `debug: true` to your caller workflow's
 `with:` block and re-run. The diagnostic step dumps npm version, the
 redacted effective `.npmrc`, OIDC env var presence, and `npm config
-list` — enough ground-truth to tell whether npm is missing the OIDC
+list` -- enough ground-truth to tell whether npm is missing the OIDC
 context entirely or has it but cannot match the trusted publisher.
 
 ## Advanced: composite action directly
@@ -411,7 +494,7 @@ bakes the correct `permissions:` block in.
 Pin by tag (`@v0` while MVP, `@v1` when stable) for stable pins, or by
 commit SHA for maximum reproducibility. Dependabot can bump pins
 automatically. Major version bumps indicate a change in gate semantics
-— always review before upgrading the pin.
+-- always review before upgrading the pin.
 
 `v0.x` is the MVP series: the gate set may still shift in response to
 real-world pilot feedback. A `v1.0.0` release will be cut once the

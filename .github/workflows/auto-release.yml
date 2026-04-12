@@ -1,0 +1,216 @@
+# Companion workflow: automatic version determination from conventional
+# commits. Runs on push to the release branch, determines if a release
+# is warranted, bumps package.json, generates CHANGELOG section, creates
+# a git tag and GitHub Release. The GitHub Release creation then triggers
+# the main release.yml pipeline (gates + publish).
+#
+# This is the "auto" mode -- the zero-dependency replacement for
+# semantic-release. Use it if you want CI to decide the version number.
+# If you prefer manual control, skip this workflow entirely and use
+# release.yml directly.
+#
+# Usage in your repo:
+#
+#   name: auto-release
+#   on:
+#     push:
+#       branches: [main]
+#   permissions:
+#     contents: write
+#   jobs:
+#     auto-release:
+#       uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+#
+# That's it. Push conventional commits to main, releases happen
+# automatically when warranted.
+
+name: auto-release
+
+on:
+  workflow_call:
+    inputs:
+      release-branch:
+        description: Branch that triggers releases
+        type: string
+        default: main
+      package-json:
+        description: Path to package.json
+        type: string
+        default: package.json
+      changelog-file:
+        description: Path to CHANGELOG.md
+        type: string
+        default: CHANGELOG.md
+      dry-run:
+        description: Determine version and changelog but do not commit, tag, or create a release
+        type: string
+        default: 'false'
+
+jobs:
+  determine:
+    runs-on: ubuntu-24.04
+    env:
+      ACTION_SRC: .release-action
+    outputs:
+      bump: ${{ steps.parse.outputs.bump }}
+      next_version: ${{ steps.parse.outputs.next_version }}
+      changelog: ${{ steps.parse.outputs.changelog }}
+      should_release: ${{ steps.decide.outputs.should_release }}
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0  # full history for tag resolution
+
+      - name: Checkout release-action at pinned SHA
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: forgesworn/release-action
+          ref: ${{ github.job_workflow_sha }}
+          path: ${{ env.ACTION_SRC }}
+          persist-credentials: false
+
+      - name: Parse conventional commits
+        id: parse
+        env:
+          PACKAGE_JSON: ${{ inputs.package-json }}
+        run: $ACTION_SRC/steps/parse-commits.sh
+
+      - name: Decide whether to release
+        id: decide
+        run: |
+          if [[ "${{ steps.parse.outputs.bump }}" == "none" ]]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "No releasable commits since last tag."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Release warranted: ${{ steps.parse.outputs.bump }} bump -> ${{ steps.parse.outputs.next_version }}"
+          fi
+
+  release:
+    needs: determine
+    if: needs.determine.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          # Default GITHUB_TOKEN can push but cannot trigger further
+          # workflow runs. If the consumer wants the push to trigger
+          # release.yml, they must pass a PAT or GitHub App token via
+          # secrets. See README "Auto mode" section.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump package.json version
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          PACKAGE_JSON: ${{ inputs.package-json }}
+        run: |
+          pkg="${PACKAGE_JSON:-package.json}"
+          tmp="$(mktemp)"
+          jq --arg v "$NEXT_VERSION" '.version = $v' "$pkg" > "$tmp"
+          mv "$tmp" "$pkg"
+          echo "Bumped $pkg to $NEXT_VERSION"
+
+      - name: Update CHANGELOG
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          CHANGELOG: ${{ needs.determine.outputs.changelog }}
+          CHANGELOG_FILE: ${{ inputs.changelog-file }}
+        run: |
+          changelog_file="${CHANGELOG_FILE:-CHANGELOG.md}"
+          date_today="$(date -u +%Y-%m-%d)"
+          heading="## ${NEXT_VERSION} (${date_today})"
+
+          if [[ ! -f "$changelog_file" ]]; then
+            {
+              echo "# Changelog"
+              echo ""
+              echo "$heading"
+              echo ""
+              echo "$CHANGELOG"
+            } > "$changelog_file"
+          else
+            # Insert new section after the first top-level heading
+            tmp="$(mktemp)"
+            inserted=false
+            while IFS= read -r line; do
+              echo "$line" >> "$tmp"
+              if ! $inserted && [[ "$line" =~ ^#\  ]]; then
+                {
+                  echo ""
+                  echo "$heading"
+                  echo ""
+                  echo "$CHANGELOG"
+                } >> "$tmp"
+                inserted=true
+              fi
+            done < "$changelog_file"
+
+            if ! $inserted; then
+              {
+                echo "$heading"
+                echo ""
+                echo "$CHANGELOG"
+                echo ""
+                cat "$changelog_file"
+              } > "$tmp"
+            fi
+
+            mv "$tmp" "$changelog_file"
+          fi
+
+          echo "Updated $changelog_file with $NEXT_VERSION section"
+
+      - name: Commit, tag, and push
+        if: inputs.dry-run != 'true'
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          PACKAGE_JSON: ${{ inputs.package-json }}
+          CHANGELOG_FILE: ${{ inputs.changelog-file }}
+        run: |
+          pkg="${PACKAGE_JSON:-package.json}"
+          changelog_file="${CHANGELOG_FILE:-CHANGELOG.md}"
+
+          git add "$pkg" "$changelog_file"
+
+          # Include lock file if it exists and changed
+          if [[ -f "package-lock.json" ]] && ! git diff --quiet package-lock.json 2>/dev/null; then
+            git add package-lock.json
+          fi
+
+          git commit -m "chore(release): ${NEXT_VERSION}"
+          git tag "v${NEXT_VERSION}"
+          git push origin HEAD --follow-tags
+
+      - name: Create GitHub Release
+        if: inputs.dry-run != 'true'
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          CHANGELOG: ${{ needs.determine.outputs.changelog }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${NEXT_VERSION}" \
+            --title "v${NEXT_VERSION}" \
+            --notes "$CHANGELOG" \
+            --target "$(git rev-parse HEAD)"
+
+      - name: Dry-run summary
+        if: inputs.dry-run == 'true'
+        env:
+          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
+          CHANGELOG: ${{ needs.determine.outputs.changelog }}
+          BUMP: ${{ needs.determine.outputs.bump }}
+        run: |
+          echo "## Dry run: would release v${NEXT_VERSION} (${BUMP} bump)"
+          echo ""
+          echo "### Changelog"
+          echo "$CHANGELOG"

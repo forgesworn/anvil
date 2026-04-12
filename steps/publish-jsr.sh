@@ -57,8 +57,13 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
 fi
 
 log "publishing to JSR"
-# npx jsr avoids a global install and keeps our footprint small.
-if ! npx --yes jsr publish --token "$JSR_TOKEN" $slow_types; then
+# Pin jsr to a known version to avoid executing arbitrary code from
+# the public registry at publish time. npx --yes + an unversioned
+# package name is a supply-chain risk — the exact vector this action
+# exists to prevent. The pinned version should be bumped deliberately
+# after review, not left floating.
+JSR_VERSION="${JSR_CLI_VERSION:-0.16.2}"
+if ! npx --yes "jsr@${JSR_VERSION}" publish --token "$JSR_TOKEN" $slow_types; then
   die "jsr publish failed"
 fi
 

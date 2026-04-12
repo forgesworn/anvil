@@ -19,7 +19,7 @@ of the defences listed below, that change needs explicit justification.
    the version bump and CHANGELOG entry. CI handles tag verification,
    gates, publish, GitHub Release body update.
 5. **The action source must be auditable in under thirty minutes total.**
-   Currently ~1250 lines of bash across all step scripts.
+   Currently ~1600 lines of bash across all step scripts.
 
 ## Threats addressed
 
