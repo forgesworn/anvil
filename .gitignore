@@ -2,5 +2,12 @@ node_modules/
 dist/
 *.log
 .DS_Store
+.idea/
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
 test/fixtures/*/dist/
 test/fixtures/*/node_modules/
