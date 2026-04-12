@@ -35,8 +35,14 @@ pkg="${PACKAGE_JSON:-package.json}"
 # npm pack --dry-run --json outputs the file list npm would actually
 # publish. This is the single source of truth -- it respects "files",
 # ".npmignore", and all of npm's inclusion/exclusion rules.
-pack_json="$(npm pack --dry-run --json 2>/dev/null)" \
+#
+# npm pack runs prepack/prepare lifecycle scripts, whose stdout gets
+# mixed into the JSON stream. Strip anything before the opening `[`
+# so jq sees valid JSON regardless of what consumer scripts print.
+pack_raw="$(npm pack --dry-run --json 2>/dev/null)" \
   || die "npm pack --dry-run --json failed"
+pack_json="$(printf '%s\n' "$pack_raw" | sed -n '/^[[{]/,$p')"
+[[ -n "$pack_json" ]] || die "npm pack --dry-run --json produced no JSON output"
 
 # Extract file paths from the JSON output. npm pack --json returns an
 # array of objects, each with a "files" array containing { "path": ... }.

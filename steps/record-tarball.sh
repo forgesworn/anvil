@@ -62,9 +62,14 @@ meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-anvil}"
 mkdir -p "$meta_dir"
 
 log "packing into $meta_dir"
-if ! pack_json="$(npm pack --pack-destination "$meta_dir" --json 2>/dev/null)"; then
+# npm pack runs prepack/prepare lifecycle scripts, whose stdout gets
+# mixed into the JSON stream. Strip anything before the opening `[`
+# so jq sees valid JSON regardless of what consumer scripts print.
+if ! pack_raw="$(npm pack --pack-destination "$meta_dir" --json 2>/dev/null)"; then
   die "npm pack failed"
 fi
+pack_json="$(printf '%s\n' "$pack_raw" | sed -n '/^[[{]/,$p')"
+[[ -n "$pack_json" ]] || die "npm pack --json produced no JSON output"
 
 filename="$(printf '%s' "$pack_json" | jq -r '.[0].filename // empty')"
 integrity="$(printf '%s' "$pack_json" | jq -r '.[0].integrity // empty')"
