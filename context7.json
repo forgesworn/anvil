@@ -1,5 +1,7 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/forgesworn/anvil",
+  "public_key": "pk_vdoXns3QEblb1693KnlDH",
   "projectTitle": "anvil",
   "description": "Forge-hardened npm publishing for JS/TS libraries. Multi-runner reproducible-build attestation, OIDC trusted publishing, hard pre-publish gates. Pure bash, zero dependencies.",
   "folders": ["docs", "examples", "steps"],

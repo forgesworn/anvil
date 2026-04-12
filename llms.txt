@@ -82,6 +82,70 @@ All in `steps/`, all bash, all sourcing `lib.sh` for shared helpers:
 | changelog-extract.sh | Parse CHANGELOG.md for the version section |
 | lib.sh | Shared helpers (header, log, warn, die, require_cmds) |
 
+## Exports-map check (verify-exports.sh)
+
+Catches the "I deleted src/foo.ts but forgot to update exports" class of
+bug before it ships a broken import to downstream consumers. Neither
+`publint` nor `arethetypeswrong` perform this file-existence check.
+
+### What it validates
+
+**Modern exports field:** Uses jq to walk the entire `.exports` tree in
+`package.json`, including all conditional keys (`import`, `require`,
+`types`, `node`, `browser`, `default`), nested conditionals, and string
+shorthand. Every leaf string starting with `./` is treated as a path
+that must exist on disk.
+
+**Legacy entry points:** Also checks top-level `main`, `module`,
+`types`, `typings`, and `bin` (both string and object forms). These are
+the pre-exports world but still shipped to consumers. Paths without a
+`./` prefix are normalised automatically.
+
+Duplicate paths (e.g. when `default` repeats an `import` target) are
+deduplicated so each file is checked exactly once.
+
+### Configuration
+
+No special configuration required. The check runs automatically as part
+of the build-a job. The only relevant input is `package-json` (defaults
+to `package.json`) which controls the path to the manifest file.
+
+### How it enforces the gate
+
+- If any exported path does not exist on disk, the step exits with
+  status 1 and the release is blocked.
+- Output on failure: `warning: missing: ./dist/missing.js` for each
+  missing path, then `error: N exports targets missing on disk —
+  refusing to publish`.
+- Output on success: `ok  ./dist/index.js` for each path, then
+  `ok: all N export targets exist`.
+- If no exports or legacy entry points are declared, the check warns
+  and passes (exit 0).
+
+### Example package.json triggering the check
+
+```json
+{
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils.mjs",
+      "require": "./dist/utils.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts"
+}
+```
+
+All six paths (four from exports, two from legacy main/types) must exist
+after the build step. If `./dist/utils.mjs` is missing, the release is
+blocked.
+
 ## Key inputs (reusable workflow)
 
 | Input | Default | Purpose |
