@@ -4,6 +4,9 @@
 # Thin wrapper over a configurable command (defaults to `npm test`).
 # The main reason this exists as a separate step rather than inlined in
 # action.yml is so that bats can smoke-test it against a fixture.
+#
+# Env:
+#   TEST_COMMAND   (default: npm test)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR

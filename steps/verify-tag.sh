@@ -5,10 +5,10 @@
 # This is the single most important gate: it prevents a maintainer from
 # accidentally publishing a development version, or tagging the wrong commit.
 #
-# Inputs (environment):
-#   PACKAGE_JSON   path to package.json (default: package.json)
-#   GIT_TAG        tag to compare (default: github.event.release.tag_name,
-#                  falling back to $GITHUB_REF_NAME)
+# Env:
+#   PACKAGE_JSON      (default: package.json)
+#   GIT_TAG           (default: github.event.release.tag_name, falling back
+#                     to $GITHUB_REF_NAME)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR

@@ -8,6 +8,9 @@
 # Walks the full exports tree: conditional keys (import/require/types) and
 # string shorthand are both handled. Skips the "default" conditional only
 # if it duplicates a target we already checked.
+#
+# Env:
+#   PACKAGE_JSON   (default: package.json)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR

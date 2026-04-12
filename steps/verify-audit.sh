@@ -8,6 +8,9 @@
 #
 # Fail level: low. Crypto libraries should treat even low-severity runtime
 # advisories as worth investigating before publishing a new version.
+#
+# Env:
+#   AUDIT_LEVEL   (default: low) — one of low, moderate, high, critical
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR

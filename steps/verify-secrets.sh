@@ -13,6 +13,9 @@
 # trade-off between false positives blocking real releases and true
 # positives leaking real secrets. Keep conservative; a consuming repo
 # can add its own pre-step if it needs stricter rules.
+#
+# Env:
+#   PACKAGE_JSON   (default: package.json)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR

@@ -8,6 +8,9 @@
 #
 # If no command is configured, we log and skip — it is the consumer's
 # responsibility to opt in, and plenty of libraries have nothing to freeze.
+#
+# Env:
+#   VECTOR_TEST_COMMAND   (default: empty — skip the gate)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
