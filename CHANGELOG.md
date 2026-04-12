@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 (2026-04-12)
+
+### Features
+
+- chain auto-release publish into release.yml via workflow_call
+- release workflow accepts explicit tag input
+
+
+
 ## 0.6.0 (2026-04-12)
 
 ### Features
