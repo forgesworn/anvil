@@ -217,7 +217,7 @@ jobs:
         run: |
           set -euo pipefail
           $ACTION_SRC/steps/record-tarball.sh
-          meta="${{ runner.temp }}/forgesworn-release/tarball.meta"
+          meta="${TARBALL_META_DIR}/tarball.meta"
           sha256="$(grep '^sha256=' "$meta" | cut -d= -f2-)"
           filename="$(grep '^filename=' "$meta" | cut -d= -f2-)"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
@@ -273,7 +273,7 @@ jobs:
         run: |
           set -euo pipefail
           $ACTION_SRC/steps/record-tarball.sh
-          meta="${{ runner.temp }}/forgesworn-release/tarball.meta"
+          meta="${TARBALL_META_DIR}/tarball.meta"
           sha256="$(grep '^sha256=' "$meta" | cut -d= -f2-)"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
@@ -378,15 +378,15 @@ jobs:
           echo "NPM_CONFIG_USERCONFIG=${NPM_CONFIG_USERCONFIG:-<unset>}"
           if [[ -n "${NPM_CONFIG_USERCONFIG:-}" && -f "$NPM_CONFIG_USERCONFIG" ]]; then
             echo "--- userconfig .npmrc (redacted) ---"
-            sed 's/\(_authToken=\).*/\1<REDACTED>/' "$NPM_CONFIG_USERCONFIG"
+            sed -E 's/(_authToken|_password|_auth|username)[[:space:]]*=.*/\1=<REDACTED>/' "$NPM_CONFIG_USERCONFIG"
             echo "--- end ---"
           fi
           echo "NODE_AUTH_TOKEN present: ${NODE_AUTH_TOKEN:+yes}"
           echo "GITHUB_ACTIONS: ${GITHUB_ACTIONS:-<unset>}"
           echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
           echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN set: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+yes}"
-          echo "--- npm config list ---"
-          npm config list || true
+          echo "--- npm config list (credentials redacted) ---"
+          npm config list 2>/dev/null | sed -E 's/(_authToken|_password|_auth|username)[[:space:]]*=.*/\1 = <REDACTED>/' || true
 
       - name: Publish to npm
         run: $ACTION_SRC/steps/publish-npm.sh

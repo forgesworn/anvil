@@ -49,6 +49,8 @@ on:
 jobs:
   determine:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     env:
       ACTION_SRC: .release-action
     outputs:
@@ -61,6 +63,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0  # full history for tag resolution
+          persist-credentials: false
 
       - name: Checkout release-action at pinned SHA
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -78,13 +81,16 @@ jobs:
 
       - name: Decide whether to release
         id: decide
+        env:
+          BUMP: ${{ steps.parse.outputs.bump }}
+          NEXT_VERSION: ${{ steps.parse.outputs.next_version }}
         run: |
-          if [[ "${{ steps.parse.outputs.bump }}" == "none" ]]; then
+          if [[ "$BUMP" == "none" ]]; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "No releasable commits since last tag."
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "Release warranted: ${{ steps.parse.outputs.bump }} bump -> ${{ steps.parse.outputs.next_version }}"
+            echo "Release warranted: ${BUMP} bump -> ${NEXT_VERSION}"
           fi
 
   release:
