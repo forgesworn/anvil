@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
-# update-release.sh — update the GitHub Release body from CHANGELOG.md.
+# update-release.sh — create or update the GitHub Release body from CHANGELOG.md.
 #
-# We do NOT create the release — the maintainer does that manually as the
-# trigger. This step runs after publish succeeds and replaces the release
-# body with the section from CHANGELOG.md, so the release notes on GitHub
-# match exactly what was published.
+# Runs after publish succeeds and stamps the Release body with the
+# CHANGELOG section for the published version plus the tarball integrity
+# block. Two call paths:
+#
+#   Manual path (caller triggered on release: published): the maintainer
+#     already created the Release; we edit the body.
+#   Chained path (auto-release.yml -> release.yml via workflow_call):
+#     auto-release pushed a tag but no Release object exists yet; we
+#     create the Release and stamp it.
+#
+# The create-or-update decision is probed via `gh release view` — if it
+# succeeds, edit; otherwise create.
 #
 # Env:
 #   GIT_TAG          release tag to edit (default: $GITHUB_REF_NAME)
 #   CHANGELOG_FILE   path to CHANGELOG.md (default: CHANGELOG.md)
 #   GITHUB_TOKEN     auth for gh (GitHub provides this automatically)
+#   GITHUB_SHA       commit SHA to target a new Release at (default:
+#                    `git rev-parse HEAD`; only used on the create path)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -151,9 +161,35 @@ else
   log "no tarball meta at $meta_file — skipping integrity block"
 fi
 
-log "updating release $tag"
-if ! gh release edit "$tag" --notes "$notes"; then
-  die "gh release edit failed"
+# Create-or-update logic. The legacy flow (caller triggered on
+# release: published) always has a pre-existing Release -- the event is
+# the trigger, so `gh release view` succeeds and we edit. The chained
+# flow (auto-release.yml calls release.yml via workflow_call) pushed a
+# tag but no human created a Release, so `gh release view` returns
+# non-zero and we create. `gh release view` distinguishes 404 (absent)
+# from auth/network failure by exit code 1 vs other non-zero. We treat
+# any non-zero as "missing" and let `gh release create` surface real
+# auth failures itself -- simpler than parsing stderr for "not found".
+if gh release view "$tag" >/dev/null 2>&1; then
+  log "updating release $tag"
+  if ! gh release edit "$tag" --notes "$notes"; then
+    die "gh release edit failed"
+  fi
+else
+  log "creating release $tag"
+  # --target pins the Release to a specific SHA. In the chained flow the
+  # publish job checks out the tag, so either $GITHUB_SHA (set by the
+  # runner) or `git rev-parse HEAD` resolves to the tagged commit. When
+  # neither is available (e.g. running outside a git checkout, as in
+  # bats fixtures), we omit --target and let gh default.
+  target_sha="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || true)}"
+  create_args=(release create "$tag" --title "$tag" --notes "$notes")
+  if [[ -n "$target_sha" ]]; then
+    create_args+=(--target "$target_sha")
+  fi
+  if ! gh "${create_args[@]}"; then
+    die "gh release create failed"
+  fi
 fi
 
 # Upload the canonical tarball as a release asset so consumers have a

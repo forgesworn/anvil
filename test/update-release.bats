@@ -33,12 +33,27 @@ setup() {
   cat > "$bin_dir/gh" <<'GH'
 #!/usr/bin/env bash
 # Fake gh: log all args (including the multi-line --notes value) to
-# a file the test can grep against. Always exits 0.
+# a file the test can grep against. Exit behaviour for `release view`
+# is driven by $GH_RELEASE_MODE so tests can exercise both the
+# create-or-update branches in update-release.sh:
+#   (unset|existing) - all commands succeed (legacy / pre-existing Release)
+#   missing          - `release view` exits 1 (chained flow / 404 case)
+#   error            - `release view` exits 2 (non-404 error)
+# All other subcommands always exit 0 so tests can inspect the call log.
 {
   printf 'GH_CALL: '
   printf '%s ' "$@"
   printf '\n'
 } >> "$GH_LOG"
+
+if [[ "${1:-}" == "release" && "${2:-}" == "view" ]]; then
+  case "${GH_RELEASE_MODE:-existing}" in
+    missing) exit 1 ;;
+    error)   exit 2 ;;
+    *)       exit 0 ;;
+  esac
+fi
+
 exit 0
 GH
   chmod +x "$bin_dir/gh"
@@ -54,6 +69,8 @@ teardown() {
   unset TARBALL_META_DIR
   unset GH_LOG
   unset GIT_TAG
+  unset GH_RELEASE_MODE
+  unset GITHUB_SHA
 }
 
 write_meta_for() {
@@ -152,4 +169,85 @@ EOF
   # the canonical tarball path under the meta dir, with --clobber for
   # idempotency.
   grep -q "release upload v1.5.0 ${meta_dir}/nsec-tree-1.5.0.tgz --clobber" "$GH_LOG"
+}
+
+# ---------------------------------------------------------------------
+# Create-or-update branch coverage (see update-release.sh header).
+# The legacy tests above all run under the default $GH_RELEASE_MODE
+# (= existing), exercising the edit branch. The tests below force the
+# missing and error modes.
+# ---------------------------------------------------------------------
+
+@test "update-release: creates a Release when none exists (chained flow)" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  write_package_json '{"name":"nsec-tree","version":"1.5.0","files":["dist"]}'
+  write_file "CHANGELOG.md" '## 1.5.0
+
+- changes
+'
+  write_meta_for "nsec-tree-1.5.0.tgz"
+  export GIT_TAG="v1.5.0"
+  export GH_RELEASE_MODE="missing"
+  export GITHUB_SHA="deadbeefcafef00d1234567890abcdef12345678"
+
+  run "$ACTION_ROOT/steps/update-release.sh"
+  [ "$status" -eq 0 ]
+
+  # On the missing branch we must call `release create`, not `release edit`.
+  grep -q "GH_CALL: release create v1.5.0" "$GH_LOG"
+  ! grep -q "GH_CALL: release edit" "$GH_LOG"
+
+  # --target must be passed and equal $GITHUB_SHA. --notes contains
+  # multi-line content so the whole call may span several log lines;
+  # check for --target and the SHA individually rather than on one line.
+  grep -q -- "--target" "$GH_LOG"
+  grep -q "$GITHUB_SHA" "$GH_LOG"
+
+  # Asset upload still runs after create.
+  grep -q "release upload v1.5.0" "$GH_LOG"
+}
+
+@test "update-release: edits existing Release (legacy flow)" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  write_package_json '{"name":"nsec-tree","version":"1.5.0","files":["dist"]}'
+  write_file "CHANGELOG.md" '## 1.5.0
+
+- changes
+'
+  write_meta_for "nsec-tree-1.5.0.tgz"
+  export GIT_TAG="v1.5.0"
+  export GH_RELEASE_MODE="existing"
+
+  run "$ACTION_ROOT/steps/update-release.sh"
+  [ "$status" -eq 0 ]
+
+  # On the existing branch we must call `release edit`, not `release create`.
+  grep -q "GH_CALL: release edit v1.5.0" "$GH_LOG"
+  ! grep -q "GH_CALL: release create" "$GH_LOG"
+}
+
+@test "update-release: create omits --target when no SHA resolvable" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  write_package_json '{"name":"nsec-tree","version":"1.5.0","files":["dist"]}'
+  write_file "CHANGELOG.md" '## 1.5.0
+
+- changes
+'
+  write_meta_for "nsec-tree-1.5.0.tgz"
+  export GIT_TAG="v1.5.0"
+  export GH_RELEASE_MODE="missing"
+  # GITHUB_SHA deliberately unset; fixture has no git repo so git
+  # rev-parse HEAD also fails. Script should omit --target rather
+  # than pass an empty string.
+  unset GITHUB_SHA
+
+  run "$ACTION_ROOT/steps/update-release.sh"
+  [ "$status" -eq 0 ]
+
+  grep -q "GH_CALL: release create v1.5.0" "$GH_LOG"
+  # --target must NOT appear in any create call when no SHA is available.
+  ! grep -qE "release create v1\.5\.0[^\n]*--target" "$GH_LOG"
 }
