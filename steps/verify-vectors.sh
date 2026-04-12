@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # verify-vectors.sh — run the frozen test vector gate.
 #
-# This is the crypto-library-specific gate. The consumer configures a
-# command that exits non-zero if any canonical/frozen output has changed
-# since the last release. For nsec-tree this is `npm run test:vectors`;
-# for another lib it might be `cargo test --test frozen`.
+# Frozen test vector gate. The consumer configures a command that exits
+# non-zero if any canonical/frozen output has changed since the last
+# release. Useful for any library with deterministic outputs: crypto,
+# codecs, parsers, serialisation.
 #
 # If no command is configured, we log and skip — it is the consumer's
 # responsibility to opt in, and plenty of libraries have nothing to freeze.
@@ -20,7 +20,7 @@ cmd="${VECTOR_TEST_COMMAND:-}"
 
 if [[ -z "$cmd" ]]; then
   warn "no vector-test-command configured — skipping frozen-vector gate"
-  warn "crypto libraries should configure this; see forgesworn/anvil README"
+  warn "libraries with deterministic outputs should configure this; see forgesworn/anvil README"
   exit 0
 fi
 

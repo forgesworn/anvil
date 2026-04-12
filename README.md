@@ -35,8 +35,8 @@ under thirty minutes -- a hard design constraint, not a slogan.
   manually and want a publish pipeline that does not make them nervous.
 - Projects that have outgrown `npm publish` from a workstation but do
   not want 597 transitive devDependencies from a release tool.
-- Cryptography, authentication, payments, or any library where
-  consumers need to trust the bytes.
+- Any library where consumers need to trust the bytes --
+  authentication, payments, cryptography, infrastructure.
 - Anyone post-`xz-utils` or post-`tj-actions/changed-files` who
   takes supply-chain surface area seriously.
 
@@ -61,29 +61,13 @@ CI enforce everything else -- is what this action provides.
 
 Many library authors already work this way, but without the safety
 net: manual `npm publish` off a workstation, long-lived `NPM_TOKEN`
-secrets, no provenance, no pre-publish gates. A quick survey of
-major Nostr and Bitcoin JS libraries (where supply-chain trust is
-table stakes) shows the pattern clearly:
+secrets, no provenance, no pre-publish gates. Even well-maintained
+libraries with thousands of weekly downloads typically have no
+secret scan, no exports check, no reproducible-build verification.
 
-- [`nbd-wtf/nostr-tools`](https://github.com/nbd-wtf/nostr-tools) --
-  no release workflow. Manual `npm publish` off a workstation.
-- [`bitcoinjs/bitcoinjs-lib`](https://github.com/bitcoinjs/bitcoinjs-lib) --
-  CI is test-only. Manual publish.
-- [`getAlby/js-sdk`](https://github.com/getAlby/js-sdk) -- custom yarn
-  workflow with classic `NODE_AUTH_TOKEN`. No OIDC, no provenance.
-- `bitcoinerlab/secp256k1` -- likely manual; workflows not public.
-- [`paulmillr/noble-hashes`](https://github.com/paulmillr/noble-hashes) --
-  the only one in the group using OIDC + SLSA provenance, via
-  paulmillr's personal [`jsbt`](https://github.com/paulmillr/jsbt)
-  reusable workflow. Tag/version match only. No secret scan, no
-  exports-sanity check, no frozen-vector gate, no audit.
-
-If crypto libraries with the strongest incentive to get this right
-are still publishing without gates, general-purpose libraries are
-doing no better. This action takes the `jsbt` pure-bash pattern and
-adds the gates any library author should want, packaged as one
-reusable workflow you can adopt in five lines of caller workflow.
-Community infrastructure, not personal infra retroactively opened up.
+This action packages the gates any library author should want into
+one reusable workflow you can adopt in five lines of caller YAML.
+Pure bash, zero dependencies, community infrastructure.
 
 ## Quick start (reusable workflow)
 

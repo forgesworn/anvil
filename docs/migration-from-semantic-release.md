@@ -1,8 +1,7 @@
 # Migrating from semantic-release
 
-This is the recipe distilled from `nsec-tree`, the first consumer. If you
-are moving a TypeScript library off `semantic-release` and onto
-`forgesworn/anvil`, this is roughly the diff to make. It is
+If you are moving a JavaScript/TypeScript library off `semantic-release`
+and onto `forgesworn/anvil`, this is roughly the diff. It is
 deliberately short. The action is small and so is the migration.
 
 ## Before you start
@@ -113,8 +112,8 @@ vectors. The action fails the publish if this command exits non-zero.
 ### 5. Run `npm install`
 
 Regenerates `package-lock.json` without the `semantic-release` tree.
-Expect the lockfile to shrink substantially. `nsec-tree`'s shrank from
-7993 lines to 1795 lines (78%) on this step alone.
+Expect the lockfile to shrink substantially (70-80% reduction is
+typical).
 
 ### 6. Configure the npm trusted publisher for your package
 

@@ -1,14 +1,7 @@
 # TypeScript library example
 
-The canonical worked example of this action is
-[`forgesworn/nsec-tree`](https://github.com/forgesworn/nsec-tree), the
-first validated consumer of `forgesworn/anvil`. It was
-migrated from `semantic-release` in the nsec-tree@1.5.0 release and
-has been publishing successfully through this action since.
-
-If you are looking for "what does a real consumer repo look like",
-read nsec-tree's `.github/workflows/release.yml`, its `package.json`,
-and the 1.5.0 CHANGELOG entry. The pattern is boring on purpose.
+A worked example of how to set up `forgesworn/anvil` for a TypeScript
+library that publishes to npm.
 
 ## Caller workflow
 
@@ -81,7 +74,7 @@ Three things are load-bearing:
 
 One-off setup on `npmjs.com`:
 
-1. Go to your package's Settings → Trusted Publisher.
+1. Go to your package's Settings -> Trusted Publisher.
 2. Add a GitHub Actions publisher with:
    - **Repository**: your package's repo (not `forgesworn/anvil`)
    - **Workflow filename**: `release.yml` (your caller workflow,
@@ -106,8 +99,6 @@ section for the full story.
 
 ## Further reading
 
-- [Root README](../../README.md) — full input reference and trusted publisher caveat
-- [THREAT-MODEL.md](../../THREAT-MODEL.md) — security contract and known limitations
-- [Migration guide from semantic-release](../../docs/migration-from-semantic-release.md) — six-step recipe distilled from the nsec-tree pilot
-- [nsec-tree on GitHub](https://github.com/forgesworn/nsec-tree) — the worked example
-- [nsec-tree on npm](https://www.npmjs.com/package/nsec-tree) — what a successful publish looks like, provenance attached
+- [Root README](../../README.md) -- full input reference and trusted publisher caveat
+- [THREAT-MODEL.md](../../THREAT-MODEL.md) -- security contract and known limitations
+- [Migration guides](../../docs/README.md) -- recipes for semantic-release, changesets, release-please, release-it, np

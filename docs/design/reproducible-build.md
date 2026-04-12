@@ -16,8 +16,7 @@ runners building the same commit could produce two different sha256s
 today, because tar headers carry timestamps and some build pipelines
 leak absolute paths or other host-specific data into compiled output.
 
-For a cryptography library whose entire value proposition is
-byte-identical output across implementations and time, "did the
+For any library where consumers need to trust the output, "did the
 registry serve the bytes CI built" is the floor, not the ceiling. The
 ceiling is "the bytes CI built are the only bytes a clean build of
 this commit could have produced". That is reproducibility, and no

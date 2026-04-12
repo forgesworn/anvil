@@ -1,6 +1,6 @@
 # forgesworn/anvil
 
-> Cryptography-grade release tool for JS/TS libraries. Multi-runner
+> Forge-hardened release tool for JS/TS libraries. Multi-runner
 > reproducible-build attestation, OIDC trusted publishing, SLSA
 > provenance, pre-publish secret scan, exports-map check, frozen-vector
 > gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1600
@@ -9,18 +9,20 @@
 ## What this is
 
 A GitHub Action (reusable workflow + composite fallback) that publishes
-npm packages with hard pre-publish gates designed for cryptography
-libraries whose value proposition is byte-identical output.
+npm packages with hard pre-publish gates. Zero dependencies, pure bash,
+auditable in thirty minutes.
 
-The v0.4 flagship: two parallel CI builds on independent runners must
+The flagship feature: two parallel CI builds on independent runners must
 produce byte-identical tarballs, or the release is blocked. No other
 JS release tool offers this today.
 
 ## Who it's for
 
-Maintainers of JavaScript/TypeScript cryptography, Nostr, and Bitcoin
-libraries who care about supply-chain integrity and want a release tool
-with a smaller attack surface than the libraries it ships.
+Any JavaScript/TypeScript library author who publishes to npm and wants
+a release pipeline with fewer moving parts than the library it ships.
+Especially useful for libraries where a compromised publish would matter
+-- authentication, payments, cryptography, infrastructure -- but the
+gates are valuable for any package.
 
 ## How to use it
 

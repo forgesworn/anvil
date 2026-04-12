@@ -6,9 +6,9 @@
 # starts on the line after the matching heading and stops at the next
 # heading of the same-or-higher level.
 #
-# Why loose? Because nsec-tree's existing CHANGELOG has a mix of H1 and H2
-# headings (a quirk of semantic-release's generator) and we want the
-# pilot migration to Just Work without re-formatting historical entries.
+# Why loose? Real-world CHANGELOGs use mixed heading levels (a common
+# quirk of semantic-release's generator) and we want migrations to Just
+# Work without re-formatting historical entries.
 #
 # Stdout-only. Exits non-zero with a clear error if no section matches.
 #

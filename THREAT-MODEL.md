@@ -102,7 +102,7 @@ similar directories.
 `package.json` for any library using this action. This is a general
 best practice for published packages — it makes the publish surface
 area predictable and greppable — and it closes this gap as a side
-effect. nsec-tree's `files` is a good reference:
+effect. A good reference:
 `["dist", "src", "README.md", "CHANGELOG.md", "LICENCE"]`.
 
 ### The reproduce gate is single-OS and two-run

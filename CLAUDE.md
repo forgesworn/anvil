@@ -4,8 +4,8 @@
 
 A GitHub Action (reusable workflow + composite fallback) that publishes
 npm packages with hard pre-publish gates. Pure bash, no Node tooling in
-the action itself. Target audience: cryptography and supply-chain-sensitive
-JS/TS library maintainers.
+the action itself. For any JS/TS library author who wants a release
+pipeline with fewer moving parts than the library it ships.
 
 ## Architecture
 

@@ -52,7 +52,7 @@ the default `strict`.
 If you genuinely cannot make a library reproducible, set
 `reproducibility-mode: off`. That falls back to v0.3 single-runner
 behaviour and skips the second build entirely. **Use this as a last
-resort** — non-reproducibility in a crypto library is a code smell,
+resort** — non-reproducibility in a published library is a code smell,
 not a configuration choice.
 
 ## Common causes of reproduce-job failures
