@@ -1,6 +1,28 @@
 {
-  "name": "forgesworn-release-action",
+  "name": "forgesworn-anvil",
   "version": "0.5.0",
   "private": true,
-  "description": "Supply-chain-hardened release tool for JS/TS libraries"
+  "description": "Supply-chain-hardened release tool for JS/TS libraries. Multi-runner reproducible-build attestation, OIDC trusted publishing, hard pre-publish gates. Pure bash, zero dependencies.",
+  "license": "MIT",
+  "author": "forgesworn",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/forgesworn/anvil.git"
+  },
+  "homepage": "https://github.com/forgesworn/anvil#readme",
+  "bugs": {
+    "url": "https://github.com/forgesworn/anvil/issues"
+  },
+  "keywords": [
+    "github-actions",
+    "npm-publish",
+    "oidc",
+    "trusted-publishing",
+    "reproducible-builds",
+    "supply-chain-security",
+    "provenance",
+    "slsa",
+    "release",
+    "publish"
+  ]
 }

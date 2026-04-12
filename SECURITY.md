@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Security issues in the action itself should be reported via
-[GitHub Security Advisories](https://github.com/forgesworn/release-action/security/advisories/new)
+[GitHub Security Advisories](https://github.com/forgesworn/anvil/security/advisories/new)
 at this repo. Do not use the public issue tracker for security reports.
 
 You should receive an initial response within 72 hours. If the issue

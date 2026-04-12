@@ -55,7 +55,7 @@ fi
 # confirmed two independent builds matched), a "Reproducible build"
 # header line is added above the integrity block. When unset or 0, the
 # block ships as a single-runner integrity anchor only.
-meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
+meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-anvil}"
 meta_file="$meta_dir/tarball.meta"
 tarball_path=""
 if [[ -f "$meta_file" ]]; then

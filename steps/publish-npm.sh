@@ -27,7 +27,7 @@
 #
 # Env:
 #   PACKAGE_JSON       (default: package.json)
-#   TARBALL_META_DIR   (default: $RUNNER_TEMP/forgesworn-release, then /tmp)
+#   TARBALL_META_DIR   (default: $RUNNER_TEMP/forgesworn-anvil, then /tmp)
 #   DRY_RUN=1          skip the real publish (for smoke-testing)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,7 +48,7 @@ version="$(jq -r '.version // empty' "$pkg")"
 
 log "package: $name@$version"
 
-meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
+meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-anvil}"
 meta_file="$meta_dir/tarball.meta"
 [[ -f "$meta_file" ]] || die "tarball meta not found at $meta_file (record-tarball must run before publish-npm)"
 

@@ -21,7 +21,7 @@ Bump the pin in your caller workflow:
 ```yaml
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0.4.0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0.4.0
 ```
 
 If your library's build is already reproducible (most modern bundlers
@@ -38,7 +38,7 @@ Add the input to your caller workflow's `with:` block:
 ```yaml
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0.4.0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0.4.0
     with:
       vector-test-command: npm run test:vectors
       reproducibility-mode: warn
@@ -158,7 +158,7 @@ v0.4 also:
 
 ## What's *not* changing
 
-- **Composite action (`uses: forgesworn/release-action@v0.4.0`)
+- **Composite action (`uses: forgesworn/anvil@v0.4.0`)
   remains v0.3-equivalent.** It still runs all gates, still records
   the tarball, still updates the release body with the integrity
   block — but it does **not** run the reproduce gate, because
@@ -169,7 +169,7 @@ v0.4 also:
   continue to work without modification.
 - **Trusted publisher configuration is unchanged.** The OIDC
   trusted-publisher record on npmjs.com still points at your repo
-  and your caller workflow file, not at `forgesworn/release-action`.
+  and your caller workflow file, not at `forgesworn/anvil`.
 - **The integrity block on the GitHub Release body is unchanged in
   shape.** It just gains the "Reproducible build" header line above
   it when the reproduce gate matched.

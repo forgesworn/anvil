@@ -1,4 +1,4 @@
-# forgesworn/release-action
+# forgesworn/anvil
 
 > Cryptography-grade release tool for JS/TS libraries. Multi-runner
 > reproducible-build attestation, OIDC trusted publishing, SLSA
@@ -36,13 +36,13 @@ permissions:
   id-token: write
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
     with:
       vector-test-command: npm run test:vectors
 ```
 
 Configure npm trusted publishing on npmjs.com for YOUR repo and YOUR
-caller workflow file (not forgesworn/release-action). Bump package.json,
+caller workflow file (not forgesworn/anvil). Bump package.json,
 tag, push, create a GitHub Release. The workflow handles everything
 else.
 
@@ -80,20 +80,31 @@ All in `steps/`, all bash, all sourcing `lib.sh` for shared helpers:
 | changelog-extract.sh | Parse CHANGELOG.md for the version section |
 | lib.sh | Shared helpers (header, log, warn, die, require_cmds) |
 
-## Key inputs
+## Key inputs (reusable workflow)
 
 | Input | Default | Purpose |
 |---|---|---|
-| vector-test-command | (empty) | Consumer-supplied frozen-vector command |
-| reproducibility-mode | strict | strict / warn / off |
-| strict-action-pins | false | Promote action-pin warnings to failures |
+| node-version | 24.11.0 | Node version (must ship npm >= 11.5.x for OIDC) |
+| registry-url | https://registry.npmjs.org | npm registry URL |
+| test-command | npm test | Full test suite command |
+| vector-test-command | (empty) | Frozen-vector gate command (skip if empty) |
+| changelog-file | CHANGELOG.md | Path to changelog |
+| package-json | package.json | Path to package.json |
+| audit-level | low | npm audit threshold (low/moderate/high/critical) |
+| version-strategy | manual | manual: you bump and tag; verify: also checks conventional commits match your bump |
+| reproducibility-mode | strict | strict: block on mismatch; warn: log only; off: skip build-b and reproduce jobs entirely |
+| strict-action-pins | true | Fail on unpinned `uses:` refs in consumer workflows |
 | dry-run | false | Skip real publish |
 | debug | false | Diagnostic logging for OIDC issues |
 
+The composite action (`uses: forgesworn/anvil@v0`) accepts the
+same inputs but does not include the reproducible-build gate (build-b
+and reproduce jobs). Use the reusable workflow for full protection.
+
 ## Links
 
-- README: https://github.com/forgesworn/release-action/blob/main/README.md
-- Threat model: https://github.com/forgesworn/release-action/blob/main/THREAT-MODEL.md
-- Design doc (reproducible builds): https://github.com/forgesworn/release-action/blob/main/docs/design/reproducible-build.md
-- Migration from semantic-release: https://github.com/forgesworn/release-action/blob/main/docs/migration-from-semantic-release.md
-- Migration from v0.3: https://github.com/forgesworn/release-action/blob/main/docs/migration-from-v0.3.md
+- README: https://github.com/forgesworn/anvil/blob/main/README.md
+- Threat model: https://github.com/forgesworn/anvil/blob/main/THREAT-MODEL.md
+- Design doc (reproducible builds): https://github.com/forgesworn/anvil/blob/main/docs/design/reproducible-build.md
+- Migration from semantic-release: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-semantic-release.md
+- Migration from v0.3: https://github.com/forgesworn/anvil/blob/main/docs/migration-from-v0.3.md

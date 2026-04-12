@@ -1,6 +1,6 @@
-# forgesworn/release-action
+# forgesworn/anvil
 
-[![CI](https://github.com/forgesworn/release-action/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/release-action/actions/workflows/ci.yml)
+[![CI](https://github.com/forgesworn/anvil/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/anvil/actions/workflows/ci.yml)
 
 A release tool for JavaScript library authors who know what version
 they are shipping and want to be sure it ships clean.
@@ -99,7 +99,7 @@ permissions:
   id-token: write   # OIDC trusted publishing to npm
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
 ```
 
 That is the whole caller workflow. No config files, no plugins.
@@ -114,7 +114,7 @@ Then:
 
 1. Configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)
    on `registry.npmjs.org` for your package. **Point it at YOUR repo and
-   YOUR `release.yml`**, not at `forgesworn/release-action`. See the
+   YOUR `release.yml`**, not at `forgesworn/anvil`. See the
    "Trusted publisher caveat" section below for why.
 2. Bump `package.json` version and add a `CHANGELOG.md` entry.
 3. Commit, tag (`v1.2.3`), push, and create a GitHub Release for the
@@ -174,7 +174,7 @@ permissions:
   contents: write
 jobs:
   auto-release:
-    uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 ```
 
 And keep your existing `release.yml` (the publish pipeline) alongside
@@ -283,7 +283,7 @@ no reproducibility check). Use the reusable workflow as the default.
 | `package-json` | `package.json` | Path to package.json |
 | `audit-level` | `low` | `npm audit` severity floor |
 | `version-strategy` | `manual` | One of `manual`, `verify`. `manual` is the default: you bump, you tag, the action publishes. `verify` parses conventional commits and fails if your bump is smaller than what the commits imply. For fully automatic versioning, use the companion `auto-release.yml` workflow instead. |
-| `strict-action-pins` | `true` | If `true` (the default), **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Set to `false` for warn-only mode. `forgesworn/release-action` is exempt by name. |
+| `strict-action-pins` | `true` | If `true` (the default), **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Set to `false` for warn-only mode. `forgesworn/anvil` is exempt by name. |
 | `reproducibility-mode` | `strict` | One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
 | `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors -- see "Trusted publisher caveat". Does not print token values. |
@@ -407,10 +407,10 @@ an attacker who compromises the action's repo or tag namespace. SHA
 pinning binds the action to a specific commit so re-pointing has no
 effect on existing consumers.
 
-`forgesworn/release-action` itself is **exempt by name** from this
+`forgesworn/anvil` itself is **exempt by name** from this
 gate. Without the carve-out, every consumer's release would fail on
-the line that loads the gate (`uses: forgesworn/release-action@v0`).
-Consumers who want SHA-pinning of release-action itself should still
+the line that loads the gate (`uses: forgesworn/anvil@v0`).
+Consumers who want SHA-pinning of anvil itself should still
 do so in their caller workflow with a 40-char SHA pin; the exemption
 is by name, not by ref, so the rest of your workflow's SHA-pin
 enforcement works exactly as you'd expect. See
@@ -421,10 +421,10 @@ enforcement works exactly as you'd expect. See
 npm's trusted publisher matches against the OIDC token's **`workflow_ref`**
 claim -- the **caller** workflow, not the reusable workflow.
 
-That means: when you use `forgesworn/release-action` via the reusable
+That means: when you use `forgesworn/anvil` via the reusable
 workflow pattern, your package's trusted publisher must be configured
 for **your own repo** and **your own caller workflow file**, not for
-`forgesworn/release-action/release.yml`.
+`forgesworn/anvil/release.yml`.
 
 Configure on npmjs.com → your package → Settings → Trusted Publisher:
 
@@ -441,7 +441,7 @@ to update tag-match, secret scan, exports sanity, frozen-vector check,
 runtime audit, etc., across every consumer. That's the real benefit.
 
 What it does **not** give you is a single trusted-publisher record in
-`forgesworn/release-action` that every consumer points at. That pattern
+`forgesworn/anvil` that every consumer points at. That pattern
 would require npm to match on `job_workflow_ref` (the reusable), which
 it doesn't today. Jordan Harband (npm contributor) has recommended
 against trusted publishing with reusable workflows for this reason -- see
@@ -480,7 +480,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: forgesworn/release-action@v0
+      - uses: forgesworn/anvil@v0
         with:
           vector-test-command: npm run test:vectors
 ```

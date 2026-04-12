@@ -1,0 +1,18 @@
+# Dry-run variant for testing your setup before the first real publish.
+# Runs the full gate sequence but skips the actual npm publish.
+
+name: release (dry run)
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      vector-test-command: npm run test:vectors
+      dry-run: true

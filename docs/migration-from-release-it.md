@@ -1,8 +1,8 @@
 # Migrating from release-it
 
 If you are moving a JavaScript/TypeScript library off `release-it` and
-onto `forgesworn/release-action`, this is the diff. release-it is a
-pragmatic tool that works both locally and in CI. release-action is
+onto `forgesworn/anvil`, this is the diff. release-it is a
+pragmatic tool that works both locally and in CI. anvil is
 CI-only by design. If you prefer publishing from your laptop, this
 migration is not for you.
 
@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
 ```
 
 If you used release-it's conventional changelog plugin and want to keep
@@ -55,7 +55,7 @@ permissions:
 
 jobs:
   auto-release:
-    uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 ```
 
 ### 2. Remove the release-it workflow
@@ -108,7 +108,7 @@ add GitHub Actions:
 |---|---|
 | Publisher | GitHub Actions |
 | Organization or user | your org or user |
-| Repository | **your package's repo** (not `forgesworn/release-action`) |
+| Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
 | Environment | *(empty)* |
 
@@ -118,11 +118,11 @@ add GitHub Actions:
 2. Add a CHANGELOG entry.
 3. Commit, push, tag, create a GitHub Release.
 
-Or if using auto mode: push conventional commits to main.
+Or with the `auto-release.yml` companion workflow: push conventional commits to main.
 
 ## What changes
 
-| Before (release-it) | After (release-action) |
+| Before (release-it) | After (anvil) |
 |---|---|
 | Interactive or CI mode | CI-only |
 | Plugin-based (Git, GitHub, npm) | All-in-one reusable workflow |
@@ -133,7 +133,7 @@ Or if using auto mode: push conventional commits to main.
 ## What you give up
 
 - Interactive local publishing mode.
-- GitLab support (release-action is GitHub Actions only).
+- GitLab support (anvil is GitHub Actions only).
 - Plugin architecture for custom release steps.
-- If you publish from your laptop regularly, release-action is not the
+- If you publish from your laptop regularly, anvil is not the
   right replacement. Consider `np` or stay on release-it.

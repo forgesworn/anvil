@@ -2,7 +2,7 @@
 
 This is the recipe distilled from `nsec-tree`, the first consumer. If you
 are moving a TypeScript library off `semantic-release` and onto
-`forgesworn/release-action`, this is roughly the diff to make. It is
+`forgesworn/anvil`, this is roughly the diff to make. It is
 deliberately short. The action is small and so is the migration.
 
 ## Before you start
@@ -11,8 +11,8 @@ You need:
 
 - A library that already publishes to npm.
 - A CHANGELOG that humans update (or willingness to start), **unless** you
-  use `auto` mode which generates changelog entries from conventional commits.
-  See the README's "Version strategy" section.
+  use the `auto-release.yml` companion workflow which generates changelog
+  entries from conventional commits. See the README's "Version strategy" section.
 - Commit rights to the repo and publish rights to the package on npmjs.com.
 
 Read [the README's "Trusted publisher caveat" section](../README.md#trusted-publisher-caveat-important)
@@ -41,7 +41,7 @@ permissions:
 
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
     with:
       vector-test-command: npm run test:vectors
 ```
@@ -125,7 +125,7 @@ add GitHub Actions:
 |---|---|
 | Publisher | GitHub Actions |
 | Organization or user | your org or user |
-| Repository | **your package's repo** (not `forgesworn/release-action`) |
+| Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
 | Environment | *(empty)* |
 
@@ -139,7 +139,7 @@ and it is in the README for a reason.
 Once the diff is merged:
 
 1. Manually bump `package.json` version (`1.4.4 → 1.5.0` or whatever
-   fits). `release-action` refuses to publish if the git tag and
+   fits). `anvil` refuses to publish if the git tag and
    `package.json` version disagree.
 2. Add a CHANGELOG entry under a heading containing the new version
    number. Any of these headings works:
@@ -188,9 +188,8 @@ context at all or has it but cannot match the trusted publisher.
   dependencies.
 
 That is genuinely it. If you liked the automatic versioning from
-commit messages, use `auto` mode -- add the companion
-`auto-release.yml` workflow alongside `release.yml` and you get the
-same behaviour with zero dependencies. If you want manual control
+commit messages, add the companion `auto-release.yml` workflow alongside
+`release.yml` and you get the same behaviour with zero dependencies. If you want manual control
 with a safety net, use `version-strategy: verify` -- the action
 parses your conventional commits and fails if your bump is smaller
 than what the commits imply. See the README's "Version strategy"

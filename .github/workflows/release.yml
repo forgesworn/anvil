@@ -40,12 +40,12 @@ name: release
 #     id-token: write
 #   jobs:
 #     release:
-#       uses: forgesworn/release-action/.github/workflows/release.yml@v0
+#       uses: forgesworn/anvil/.github/workflows/release.yml@v0
 #       with:
 #         vector-test-command: npm run test:vectors
 #
 # When pinned with @v0 (or any ref), the action scripts are pulled from
-# forgesworn/release-action at the same SHA as this workflow — there is
+# forgesworn/anvil at the same SHA as this workflow — there is
 # no floating @main reference, so v0-pinned consumers get deterministic
 # behaviour until they bump the pin.
 
@@ -91,7 +91,7 @@ on:
         description: >-
           If "true" (the default), verify-action-pins fails the release on
           any unpinned `uses:` reference in .github/workflows. Set to
-          "false" for warn-only mode. forgesworn/release-action is exempt
+          "false" for warn-only mode. forgesworn/anvil is exempt
           by name.
         required: false
         type: string
@@ -139,7 +139,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_SRC: .release-action
+      ACTION_SRC: .anvil
       PACKAGE_JSON: ${{ inputs.package-json }}
       GIT_TAG: ${{ github.event.release.tag_name }}
     outputs:
@@ -151,10 +151,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Checkout release-action at pinned SHA
+      - name: Checkout anvil at pinned SHA
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: forgesworn/release-action
+          repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
           path: ${{ env.ACTION_SRC }}
           persist-credentials: false
@@ -213,7 +213,7 @@ jobs:
       - name: Record tarball integrity
         id: record
         env:
-          TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-release
+          TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-anvil
         run: |
           set -euo pipefail
           $ACTION_SRC/steps/record-tarball.sh
@@ -227,7 +227,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tarball-A
-          path: ${{ runner.temp }}/forgesworn-release
+          path: ${{ runner.temp }}/forgesworn-anvil
           retention-days: 1
           if-no-files-found: error
 
@@ -237,7 +237,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_SRC: .release-action
+      ACTION_SRC: .anvil
       PACKAGE_JSON: ${{ inputs.package-json }}
     outputs:
       sha256: ${{ steps.record.outputs.sha256 }}
@@ -247,10 +247,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Checkout release-action at pinned SHA
+      - name: Checkout anvil at pinned SHA
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: forgesworn/release-action
+          repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
           path: ${{ env.ACTION_SRC }}
           persist-credentials: false
@@ -269,7 +269,7 @@ jobs:
       - name: Record tarball integrity
         id: record
         env:
-          TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-release
+          TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-anvil
         run: |
           set -euo pipefail
           $ACTION_SRC/steps/record-tarball.sh
@@ -281,7 +281,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tarball-B
-          path: ${{ runner.temp }}/forgesworn-release
+          path: ${{ runner.temp }}/forgesworn-anvil
           retention-days: 1
           if-no-files-found: error
 
@@ -294,10 +294,10 @@ jobs:
     outputs:
       reproducible: ${{ steps.compare.outputs.reproducible }}
     steps:
-      - name: Checkout release-action at pinned SHA
+      - name: Checkout anvil at pinned SHA
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: forgesworn/release-action
+          repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
           persist-credentials: false
 
@@ -330,22 +330,22 @@ jobs:
       contents: write
       id-token: write
     env:
-      ACTION_SRC: .release-action
+      ACTION_SRC: .anvil
       PACKAGE_JSON: ${{ inputs.package-json }}
       CHANGELOG_FILE: ${{ inputs.changelog-file }}
       GIT_TAG: ${{ github.event.release.tag_name }}
       DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
-      TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-release
+      TARBALL_META_DIR: ${{ runner.temp }}/forgesworn-anvil
     steps:
       - name: Checkout consumer repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Checkout release-action at pinned SHA
+      - name: Checkout anvil at pinned SHA
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: forgesworn/release-action
+          repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
           path: ${{ env.ACTION_SRC }}
           persist-credentials: false
@@ -360,7 +360,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: tarball-A
-          path: ${{ runner.temp }}/forgesworn-release
+          path: ${{ runner.temp }}/forgesworn-anvil
 
       # Gated behind `debug: true`. When a consumer hits the classic
       # "OIDC token exchange error - package not found" (or similar),

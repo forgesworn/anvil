@@ -1,6 +1,6 @@
 # Threat model
 
-This document captures what `forgesworn/release-action` defends against,
+This document captures what `forgesworn/anvil` defends against,
 what it explicitly does not, and why. It is the security contract between
 the action and its consumers. If a change to the action would break one
 of the defences listed below, that change needs explicit justification.
@@ -141,20 +141,20 @@ power-user escape hatch for custom job structure; the reusable
 workflow is the documented default and the only path to the v0.4
 flagship guarantee.
 
-### `verify-action-pins` exempts `forgesworn/release-action` and skips dynamic uses
+### `verify-action-pins` exempts `forgesworn/anvil` and skips dynamic uses
 
 The `verify-action-pins` gate has two known false negatives:
 
-1. **Self-exemption.** Lines whose action name is `forgesworn/release-action`
-   or starts with `forgesworn/release-action/` are not flagged, even in
+1. **Self-exemption.** Lines whose action name is `forgesworn/anvil`
+   or starts with `forgesworn/anvil/` are not flagged, even in
    `strict-action-pins: true` mode. Without this carve-out, every
    consumer's release would fail on the line that loads the gate
-   itself (`uses: forgesworn/release-action@v0`). The exemption is by
+   itself (`uses: forgesworn/anvil@v0`). The exemption is by
    **name**, not by ref — a consumer who SHA-pins us in their caller
    workflow gets the same SHA-pin enforcement on every other action.
    This is a pragmatic trade-off: it sidesteps a chicken-and-egg
    adoption problem at the cost of moving the trust decision for
-   release-action itself one level up, into the consumer's choice of
+   anvil itself one level up, into the consumer's choice of
    pin in the caller workflow.
 2. **Dynamic uses.** A `uses: ${{ matrix.action }}` line cannot be
    resolved statically and is silently ignored. Consumers who template
@@ -176,5 +176,5 @@ the date suffix). The current behaviour is a pragmatic trade-off.
 ## Reporting vulnerabilities
 
 Security issues in the action itself should be reported via GitHub
-Security Advisories at the `forgesworn/release-action` repo.
+Security Advisories at the `forgesworn/anvil` repo.
 Non-security bugs go to the regular issue tracker.

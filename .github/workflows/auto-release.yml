@@ -19,7 +19,7 @@
 #     contents: write
 #   jobs:
 #     auto-release:
-#       uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+#       uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 #
 # That's it. Push conventional commits to main, releases happen
 # automatically when warranted.
@@ -52,7 +52,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_SRC: .release-action
+      ACTION_SRC: .anvil
     outputs:
       bump: ${{ steps.parse.outputs.bump }}
       next_version: ${{ steps.parse.outputs.next_version }}
@@ -65,10 +65,10 @@ jobs:
           fetch-depth: 0  # full history for tag resolution
           persist-credentials: false
 
-      - name: Checkout release-action at pinned SHA
+      - name: Checkout anvil at pinned SHA
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: forgesworn/release-action
+          repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
           path: ${{ env.ACTION_SRC }}
           persist-credentials: false

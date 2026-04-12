@@ -1,8 +1,8 @@
 # Migrating from release-please
 
 If you are moving a JavaScript/TypeScript library off `release-please`
-and onto `forgesworn/release-action`, this is the diff. release-please
-creates release PRs but does not publish to npm. release-action handles
+and onto `forgesworn/anvil`, this is the diff. release-please
+creates release PRs but does not publish to npm. anvil handles
 the entire pipeline including publish. The migration is additive: you
 are gaining a publish step, not losing one.
 
@@ -49,7 +49,7 @@ permissions:
   contents: write
 jobs:
   auto-release:
-    uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 ```
 
 **`.github/workflows/release.yml`** (the publish pipeline, triggered
@@ -65,7 +65,7 @@ permissions:
   id-token: write
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
 ```
 
 ### 2. Remove release-please configuration
@@ -97,13 +97,13 @@ add GitHub Actions:
 |---|---|
 | Publisher | GitHub Actions |
 | Organization or user | your org or user |
-| Repository | **your package's repo** (not `forgesworn/release-action`) |
+| Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
 | Environment | *(empty)* |
 
 ## What changes
 
-| Before (release-please) | After (release-action) |
+| Before (release-please) | After (anvil) |
 |---|---|
 | Release PR with version bump + CHANGELOG | auto-release commits directly to main |
 | Separate npm publish step you maintain | Publish built into the pipeline |
@@ -115,16 +115,16 @@ add GitHub Actions:
 
 - The release PR review gate. release-please's main differentiator is
   that a human reviews and merges the version bump before it ships.
-  release-action's `auto` mode commits the bump directly. If you want
-  human approval, use `manual` mode instead of `auto` -- you bump and
-  tag yourself, and the action handles the rest.
+  anvil's `auto-release.yml` companion workflow commits the bump
+  directly. If you want human approval, use `manual` mode instead -- you
+  bump and tag yourself, and the action handles the rest.
 - Multi-language support. release-please handles Java, Python, Go, Rust,
-  etc. release-action is JS/TS only.
-- Monorepo manifest mode. release-action is single-package by design.
+  etc. anvil is JS/TS only.
+- Monorepo manifest mode. anvil is single-package by design.
 
 ## What you gain
 
 - Complete publish pipeline with OIDC, provenance, and supply-chain gates.
 - Reproducible-build attestation.
 - Zero new dependencies (release-please is also dependency-light, but
-  release-action adds the publish step without adding any).
+  anvil adds the publish step without adding any).

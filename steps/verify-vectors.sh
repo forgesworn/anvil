@@ -20,7 +20,7 @@ cmd="${VECTOR_TEST_COMMAND:-}"
 
 if [[ -z "$cmd" ]]; then
   warn "no vector-test-command configured — skipping frozen-vector gate"
-  warn "crypto libraries should configure this; see forgesworn/release-action README"
+  warn "crypto libraries should configure this; see forgesworn/anvil README"
   exit 0
 fi
 

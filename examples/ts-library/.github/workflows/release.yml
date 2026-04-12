@@ -1,0 +1,27 @@
+# Minimal caller workflow for forgesworn/anvil.
+# Place this in YOUR library at .github/workflows/release.yml.
+#
+# Prerequisites:
+#   1. Configure npm trusted publishing on npmjs.com for THIS repo
+#      (not forgesworn/anvil) pointing at THIS workflow file.
+#   2. Bump package.json, commit, tag (e.g. v1.2.3), push, then
+#      create a GitHub Release for that tag.
+#
+# The reusable workflow handles: tests, vector gate, npm audit,
+# exports check, secret scan, action-pin audit, reproducible build
+# (two-runner), and OIDC-authenticated npm publish.
+
+name: release
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      vector-test-command: npm run test:vectors

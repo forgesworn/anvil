@@ -1,7 +1,7 @@
 # Migrating from np
 
 If you are moving from `np` (Sindre Sorhus's interactive publish tool)
-to `forgesworn/release-action`, you are making a philosophical shift:
+to `forgesworn/anvil`, you are making a philosophical shift:
 publishing moves from your laptop to CI. The safety checks np provides
 (clean working tree, correct branch, tests pass) are replaced by harder
 gates that run in a controlled environment with OIDC credentials.
@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
 ```
 
 ### 2. Remove np
@@ -80,7 +80,7 @@ add GitHub Actions:
 |---|---|
 | Publisher | GitHub Actions |
 | Organization or user | your org or user |
-| Repository | **your package's repo** (not `forgesworn/release-action`) |
+| Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
 | Environment | *(empty)* |
 
@@ -111,7 +111,7 @@ Or if you want automatic versioning, add the companion
 
 ## What changes
 
-| Before (np) | After (release-action) |
+| Before (np) | After (anvil) |
 |---|---|
 | Interactive local CLI | CI-only pipeline |
 | Publishes from your machine | Publishes from GitHub Actions with OIDC |

@@ -14,10 +14,10 @@
 # This is the same vector that hit `tj-actions/changed-files` in
 # March 2025.
 #
-# Self-exemption: forgesworn/release-action is exempt by name. Without
+# Self-exemption: forgesworn/anvil is exempt by name. Without
 # this carve-out, every consumer's gate would fail on the very line
-# that loads the gate (their `uses: forgesworn/release-action@v0`).
-# Consumers who want SHA pinning of release-action itself should pin
+# that loads the gate (their `uses: forgesworn/anvil@v0`).
+# Consumers who want SHA pinning of anvil itself should pin
 # the version in their caller workflow with a 40-char SHA AND set
 # strict-action-pins: true; the exemption is by name, not by ref, so
 # a consumer who pins us with a SHA still gets the SHA enforcement
@@ -80,14 +80,14 @@ for file in "${files[@]}"; do
       total_count=$((total_count + 1))
 
       # Self-exemption — see header comment. Matches both the
-      # composite-action form (`forgesworn/release-action`) and the
-      # reusable-workflow form (`forgesworn/release-action/.github/...`).
+      # composite-action form (`forgesworn/anvil`) and the
+      # reusable-workflow form (`forgesworn/anvil/.github/...`).
       # Still warn if the ref is not a SHA — callers using @v0 are
       # exposed to tag retargeting on the highest-privilege dependency
       # in the release job.
-      if [[ "$action" == "forgesworn/release-action" || "$action" == forgesworn/release-action/* ]]; then
+      if [[ "$action" == "forgesworn/anvil" || "$action" == forgesworn/anvil/* ]]; then
         if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
-          warn "forgesworn/release-action is not SHA-pinned ($ref) — consider pinning to a commit SHA"
+          warn "forgesworn/anvil is not SHA-pinned ($ref) — consider pinning to a commit SHA"
         fi
         continue
       fi
@@ -123,7 +123,7 @@ if (( unpinned_count > 0 )); then
   fi
   warn "$unpinned_count unpinned action reference(s) — consider SHA pins"
   log "set strict-action-pins: true in your caller workflow to make this fatal"
-  log "(forgesworn/release-action itself is exempt; see THREAT-MODEL.md)"
+  log "(forgesworn/anvil itself is exempt; see THREAT-MODEL.md)"
 fi
 
 ok "$total_count action ref(s) inspected, $unpinned_count unpinned"

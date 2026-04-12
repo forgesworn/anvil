@@ -1,4 +1,4 @@
-# Dogfood: release-action releases itself using its own scripts.
+# Dogfood: anvil releases itself using its own scripts.
 #
 # On every push to main, parse-commits.sh determines if a release is
 # warranted from conventional commits. If so, bump package.json,

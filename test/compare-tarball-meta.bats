@@ -20,7 +20,7 @@ write_meta() {
   local sha="$2"
   cat > "$FIXTURE_DIR/$name" <<EOF
 filename=test-pkg-1.0.0.tgz
-path=/tmp/forgesworn-release/test-pkg-1.0.0.tgz
+path=/tmp/forgesworn-anvil/test-pkg-1.0.0.tgz
 size=1234
 unpacked_size=5678
 sha256=$sha

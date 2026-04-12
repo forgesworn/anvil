@@ -2,7 +2,7 @@
 
 The canonical worked example of this action is
 [`forgesworn/nsec-tree`](https://github.com/forgesworn/nsec-tree), the
-first validated consumer of `forgesworn/release-action`. It was
+first validated consumer of `forgesworn/anvil`. It was
 migrated from `semantic-release` in the nsec-tree@1.5.0 release and
 has been publishing successfully through this action since.
 
@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
     with:
       vector-test-command: npm run test:vectors
 ```
@@ -83,7 +83,7 @@ One-off setup on `npmjs.com`:
 
 1. Go to your package's Settings → Trusted Publisher.
 2. Add a GitHub Actions publisher with:
-   - **Repository**: your package's repo (not `forgesworn/release-action`)
+   - **Repository**: your package's repo (not `forgesworn/anvil`)
    - **Workflow filename**: `release.yml` (your caller workflow,
      not the reusable one)
    - **Environment**: leave empty

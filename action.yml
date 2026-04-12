@@ -1,4 +1,4 @@
-name: forgesworn-release
+name: anvil
 description: >-
   Supply-chain-hardened release tool for JS/TS libraries. Multi-runner
   reproducible-build attestation, OIDC trusted publishing, provenance,
@@ -46,7 +46,7 @@ inputs:
     description: >-
       If "true" (the default), verify-action-pins fails the release on
       any unpinned `uses:` reference in .github/workflows. Set to
-      "false" for warn-only mode. forgesworn/release-action is exempt
+      "false" for warn-only mode. forgesworn/anvil is exempt
       by name.
     required: false
     default: 'true'

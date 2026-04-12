@@ -1,8 +1,8 @@
 # Migrating from changesets
 
 If you are moving a single-package TypeScript library off `@changesets/cli`
-and onto `forgesworn/release-action`, this is the diff. Monorepo users:
-release-action is single-package by design. Stay on changesets, or
+and onto `forgesworn/anvil`, this is the diff. Monorepo users:
+anvil is single-package by design. Stay on changesets, or
 split your packages into separate repos.
 
 ## Before you start
@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
 ```
 
 If you want automatic versioning from conventional commits (closest to
@@ -55,7 +55,7 @@ permissions:
 
 jobs:
   auto-release:
-    uses: forgesworn/release-action/.github/workflows/auto-release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 ```
 
 ### 2. Remove the changesets release workflow
@@ -111,7 +111,7 @@ add GitHub Actions:
 |---|---|
 | Publisher | GitHub Actions |
 | Organization or user | your org or user |
-| Repository | **your package's repo** (not `forgesworn/release-action`) |
+| Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
 | Environment | *(empty)* |
 
@@ -128,11 +128,11 @@ commits to `main` and the workflow handles the rest.
 
 ## What changes
 
-| Before (changesets) | After (release-action) |
+| Before (changesets) | After (anvil) |
 |---|---|
-| `npx changeset` to describe changes | Write CHANGELOG directly (or use auto mode) |
+| `npx changeset` to describe changes | Write CHANGELOG directly (or use `auto-release.yml`) |
 | `.changeset/*.md` files in PRs | No extra files |
-| `changeset version` to bump | Manual bump (or auto mode) |
+| `changeset version` to bump | Manual bump (or `auto-release.yml`) |
 | `changeset publish` to release | GitHub Release triggers pipeline |
 | ~300 transitive deps | Zero release-tool deps |
 | No OIDC, no provenance | OIDC + SLSA provenance on every publish |
@@ -143,4 +143,4 @@ commits to `main` and the workflow handles the rest.
 - Native monorepo support with dependency graph awareness.
 - The changeset-per-PR workflow that decouples versioning from commits.
 - If you relied on changesets for monorepo inter-package versioning,
-  there is no replacement in release-action today.
+  there is no replacement in anvil today.

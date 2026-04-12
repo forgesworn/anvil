@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lib.sh — shared helpers for forgesworn/release-action steps.
+# lib.sh — shared helpers for forgesworn/anvil steps.
 #
 # Sourced by every step script. Keep tiny — the whole action must be
 # auditable in under thirty minutes.

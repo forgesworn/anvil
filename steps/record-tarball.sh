@@ -27,7 +27,7 @@
 #
 # Env:
 #   PACKAGE_JSON        (default: package.json)
-#   TARBALL_META_DIR    (default: $RUNNER_TEMP/forgesworn-release, then /tmp)
+#   TARBALL_META_DIR    (default: $RUNNER_TEMP/forgesworn-anvil, then /tmp)
 #   SOURCE_DATE_EPOCH   (default: derived from git log -1 --format=%ct)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -58,7 +58,7 @@ log "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
 # because every file has the same mtime by the time we pack.
 "${SCRIPT_DIR}/normalise-mtimes.sh"
 
-meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-release}"
+meta_dir="${TARBALL_META_DIR:-${RUNNER_TEMP:-/tmp}/forgesworn-anvil}"
 mkdir -p "$meta_dir"
 
 log "packing into $meta_dir"

@@ -1,17 +1,17 @@
-# How release-action compares
+# How anvil compares
 
 An honest comparison with the five tools most JS/TS library authors
 consider for release automation. Updated 2026-04.
 
 ## At a glance
 
-| | release-action | semantic-release | changesets | release-please | release-it | np |
+| | anvil | semantic-release | changesets | release-please | release-it | np |
 |---|---|---|---|---|---|---|
 | Weekly npm downloads | -- (GH Action) | 2.4M | 2.6M | -- (GH Action) | 760K | 140K |
 | GitHub stars | -- | 23.5K | 11.7K | 6.7K | 8.9K | 7.7K |
 | Direct dependencies | **0** | 28 | 26 | n/a | 23 | 36 |
 | Version decision | manual or auto | auto (commits) | manual (changeset files) | auto (commits) | interactive or auto | interactive |
-| CHANGELOG generation | auto (in auto mode) | auto | auto (from changesets) | auto | auto | no |
+| CHANGELOG generation | auto (via auto-release.yml) | auto | auto (from changesets) | auto | auto | no |
 | OIDC trusted publishing | yes (required) | optional | no | no | optional | no |
 | SLSA provenance | yes (every publish) | optional | no | no | no | no |
 | Reproducible builds | **yes (two-runner)** | no | no | no | no | no |
@@ -34,9 +34,9 @@ transitive.
 **What semantic-release does better:**
 - Huge community: answers on StackOverflow, tutorials everywhere
 
-**What release-action does better:**
-- Same push-to-main automation via `auto` mode, zero dependencies
-  (vs ~500 transitive in semantic-release)
+**What anvil does better:**
+- Same push-to-main automation via the [`auto-release.yml`](../README.md#auto-version-strategy)
+  companion workflow, zero dependencies (vs ~500 transitive in semantic-release)
 - Reproducible-build attestation (no other tool offers this)
 - Secret scanning, exports verification, action-pin auditing
 - OIDC trusted publishing required by default (not optional)
@@ -49,17 +49,17 @@ transitive.
 semantic-release derives your public API contract from commit message
 prefixes. One contributor writes `feat:` instead of `fix:` and you
 ship a minor instead of a patch. The tool provides no way to override
-this without editing commit history. release-action gives you three
+this without editing commit history. anvil gives you three
 options: `manual` (you decide everything), `verify` (you decide but
-the tool catches undersized bumps), or `auto` (same commit-driven
-automation, zero dependencies).
+the tool catches undersized bumps), or the `auto-release.yml` companion
+workflow (same commit-driven automation, zero dependencies).
 
 **Who should switch:**
 Anyone who wants the same push-to-main automation without adding ~500
-transitive dependencies to their repo. `auto` mode gives you the
-same workflow. `verify` mode gives you something semantic-release
+transitive dependencies to their repo. The `auto-release.yml` companion
+workflow gives you the same automation. `verify` mode gives you something semantic-release
 can't: manual version control with automated consistency checking.
-If your consumers audit your dependency tree, release-action removes
+If your consumers audit your dependency tree, anvil removes
 the entire release-tooling attack surface.
 
 **Migration effort:** Low. See
@@ -81,7 +81,7 @@ killer feature.
 - PR-level granularity (one changeset per PR, not per commit)
 - Mature ecosystem (used by Vercel, Chakra UI, Radix)
 
-**What release-action does better:**
+**What anvil does better:**
 - Zero dependencies (vs ~300 transitive)
 - Reproducible builds, secret scanning, OIDC, provenance
 - No extra files to manage (changesets require `.changeset/*.md`)
@@ -89,9 +89,9 @@ killer feature.
 - Supply-chain gates that changesets doesn't offer
 
 **The monorepo gap:**
-This is the main reason to choose changesets today. release-action is
+This is the main reason to choose changesets today. anvil is
 single-package by design. If you have a monorepo with inter-package
-dependencies, changesets handles that natively. release-action
+dependencies, changesets handles that natively. anvil
 requires one workflow per package.
 
 **Who should switch:**
@@ -118,18 +118,18 @@ to npm -- that's left to you.
 - Monorepo support with manifest mode
 - Lightweight: no npm package to install
 
-**What release-action does better:**
+**What anvil does better:**
 - Complete pipeline: gates + publish + provenance (release-please
   stops at tagging)
 - Reproducible builds, secret scanning, exports verification
 - OIDC trusted publishing and SLSA provenance built in
-- `auto` mode provides the same commit-to-release automation
+- The `auto-release.yml` companion workflow provides the same commit-to-release automation
 - `verify` mode offers something release-please can't: manual
   version control with automated consistency checking
 
 **The publish gap:**
 release-please intentionally does not publish. You need a separate
-workflow step for `npm publish`. release-action handles the entire
+workflow step for `npm publish`. anvil handles the entire
 pipeline including publish with OIDC and provenance.
 
 **Who should switch:**
@@ -150,12 +150,12 @@ dependencies.
 
 **What release-it does better:**
 - Interactive mode for local releases
-- GitLab support (release-action is GitHub-only)
+- GitLab support (anvil is GitHub-only)
 - Plugin architecture (more extensible)
 - Conventional changelog plugin for auto-changelogs
 - Simpler config for simple projects
 
-**What release-action does better:**
+**What anvil does better:**
 - Zero dependencies (vs ~200 transitive)
 - Reproducible builds, secret scanning, exports verification
 - OIDC trusted publishing and SLSA provenance
@@ -184,7 +184,7 @@ designed for CI.
 - Built-in 2FA support
 - No CI setup needed
 
-**What release-action does better:**
+**What anvil does better:**
 - CI-native: no local tooling, no developer machine dependency
 - OIDC trusted publishing (no long-lived tokens)
 - Reproducible builds, secret scanning, exports verification
@@ -192,10 +192,10 @@ designed for CI.
 - No npm install needed (pure bash in CI)
 
 **The philosophy gap:**
-np is "better npm publish from your laptop". release-action is
+np is "better npm publish from your laptop". anvil is
 "npm publish should never happen from a laptop". These are
 fundamentally different philosophies. np trusts the developer's
-machine. release-action trusts only CI with OIDC credentials.
+machine. anvil trusts only CI with OIDC credentials.
 
 **Who should switch:**
 Anyone who's decided publishing should happen in CI, not locally.
@@ -208,9 +208,9 @@ If you prefer the interactive local workflow, np is the right tool.
 
 ## Feature matrix: supply-chain hardening
 
-This is where release-action's differentiation is clearest.
+This is where anvil's differentiation is clearest.
 
-| Gate | release-action | semantic-release | changesets | release-please | release-it | np |
+| Gate | anvil | semantic-release | changesets | release-please | release-it | np |
 |---|---|---|---|---|---|---|
 | OIDC (no stored tokens) | required | opt-in | no | no | opt-in | no |
 | SLSA provenance | every publish | opt-in | no | no | no | no |
@@ -223,7 +223,7 @@ This is where release-action's differentiation is clearest.
 | Tarball integrity in release | yes | no | no | no | no | no |
 | Zero release-tool deps | yes | no | no | yes (GH Action) | no | no |
 
-## When NOT to use release-action
+## When NOT to use anvil
 
 Be honest about the gaps:
 
@@ -233,15 +233,15 @@ Be honest about the gaps:
 - **You publish from your laptop and prefer it that way.** Use np.
 - **You use GitLab, not GitHub.** Use release-it.
 - **You need the PR-review gate before version bumps.** Use
-  release-please. (release-action's `verify` mode checks after the
+  release-please. (anvil's `verify` mode checks after the
   fact, not before.)
 
 ## The pitch
 
-release-action is for library authors who:
+anvil is for library authors who:
 
 1. Already bump versions and write changelogs manually (or want the
-   `auto` mode to do it with zero dependencies)
+   `auto-release.yml` companion workflow to do it with zero dependencies)
 2. Want a publish pipeline that does not make them nervous
 3. Care about supply-chain surface area
 4. Want the only JS release tool that offers reproducible-build

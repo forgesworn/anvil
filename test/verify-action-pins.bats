@@ -79,28 +79,28 @@ jobs:
   [[ "$output" == *"strict-action-pins enabled"* ]]
 }
 
-@test "verify-action-pins: forgesworn/release-action is exempt but warns when not SHA-pinned" {
+@test "verify-action-pins: forgesworn/anvil is exempt but warns when not SHA-pinned" {
   write_workflow release.yml '
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
     with:
       vector-test-command: npm run test:vectors
 '
   STRICT_ACTION_PINS=1 run "$ACTION_ROOT/steps/verify-action-pins.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"forgesworn/release-action is not SHA-pinned"* ]]
+  [[ "$output" == *"forgesworn/anvil is not SHA-pinned"* ]]
 }
 
-@test "verify-action-pins: forgesworn/release-action SHA-pinned produces no warning" {
+@test "verify-action-pins: forgesworn/anvil SHA-pinned produces no warning" {
   write_workflow release.yml '
 jobs:
   release:
-    uses: forgesworn/release-action/.github/workflows/release.yml@abcdef0123456789abcdef0123456789abcdef01
+    uses: forgesworn/anvil/.github/workflows/release.yml@abcdef0123456789abcdef0123456789abcdef01
 '
   STRICT_ACTION_PINS=1 run "$ACTION_ROOT/steps/verify-action-pins.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"forgesworn/release-action is not SHA-pinned"* ]]
+  [[ "$output" != *"forgesworn/anvil is not SHA-pinned"* ]]
 }
 
 @test "verify-action-pins: docker:// tag-ref action is flagged as unpinned" {
