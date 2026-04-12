@@ -5,6 +5,10 @@
 > provenance, pre-publish secret scan, exports-map check, frozen-vector
 > gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1600
 > lines, auditable in thirty minutes.
+>
+> Not to be confused with Foundry's `anvil` (Ethereum dev node) or
+> anvil.works (low-code app platform). This is a GitHub Action for
+> npm release pipelines.
 
 ## What this is
 
@@ -82,9 +86,37 @@ imply. A feat: commit with only a patch bump is caught.
 ### Auto (companion workflow)
 
 The auto-release.yml companion workflow replaces semantic-release
-entirely. It runs on push to main, parses conventional commits,
-determines the bump, updates package.json and CHANGELOG.md, tags,
-and creates a GitHub Release -- which triggers the main release pipeline.
+entirely. On push to main it parses conventional commits, bumps
+package.json, updates CHANGELOG.md, tags, pushes, and fires
+release.yml via workflow_dispatch to publish -- all in one human
+push, no PAT.
+
+Auto mode is a TWO-FILE setup. Your release.yml must declare a
+workflow_dispatch trigger with a tag input (alongside the manual
+release: published trigger):
+
+```yaml
+name: release
+on:
+  release:
+    types: [published]       # manual flow
+  workflow_dispatch:         # auto flow dispatches here
+    inputs:
+      tag:
+        description: Release tag to publish
+        type: string
+        required: true
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+```
+
+Your auto-release.yml caller stays tiny:
 
 ```yaml
 name: auto-release
@@ -93,18 +125,30 @@ on:
     branches: [main]
 permissions:
   contents: write
+  actions: write            # required to dispatch release.yml
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 ```
 
-Keep your existing release.yml (the publish pipeline) alongside it.
+Why workflow_dispatch, not workflow_call: the OIDC workflow_ref
+claim used by npm trusted publishing is the entry-point caller. A
+workflow_call chain would make auto-release.yml the OIDC subject,
+forcing every consumer to reconfigure trusted publishing.
+workflow_dispatch fires release.yml as a separate run with
+release.yml itself as the OIDC entry-point, so existing trusted-
+publisher configuration keeps working unchanged.
 
-Note: the default GITHUB_TOKEN can create releases but cannot trigger
-further workflow runs. If you need the auto-created release to trigger
-release.yml automatically, use a GitHub App token or PAT with
-contents: write scope. Set this as a repo secret and reference it in
-the caller workflow's `secrets: inherit` or pass it as a named secret.
+Why no PAT: GitHub's anti-recursion rule suppresses most events
+created by the default GITHUB_TOKEN, but workflow_dispatch and
+repository_dispatch are explicit exceptions.
+
+All release-time inputs (vector-test-command, reproducibility-mode,
+audit-level, strict-action-pins, node-version, test-command, debug)
+live on release.yml. auto-release.yml accepts only: release-branch,
+release-workflow (default release.yml -- override if your release
+workflow has a different filename), package-json, changelog-file,
+dry-run.
 
 ## Architecture
 
@@ -191,6 +235,7 @@ All in steps/, all bash, all sourcing lib.sh for shared helpers:
 | version-strategy | manual | manual: you bump and tag; verify: also checks conventional commits |
 | reproducibility-mode | strict | strict: block on mismatch; warn: log only; off: skip build-b |
 | strict-action-pins | true | Fail on unpinned uses: refs in consumer workflows |
+| tag | (empty) | Explicit release tag (e.g. v1.2.3). Set by auto-release.yml's workflow_dispatch bridge via `${{ inputs.tag || '' }}`. Empty defaults to github.event.release.tag_name for the legacy release-event trigger path. |
 | dry-run | false | Skip real publish |
 | debug | false | Diagnostic logging for OIDC issues |
 
@@ -199,6 +244,7 @@ Secrets:
 | Secret | When needed |
 |---|---|
 | JSR_TOKEN | Only if jsr.json exists. JSR does not yet support OIDC. |
+| GH_TOKEN | Deprecated. Previously bridged the auto-release -> release.yml event gap via PAT before workflow_dispatch was adopted. Default GITHUB_TOKEN is sufficient now; silently ignored if still set. Safe to remove from caller workflows. |
 
 ## Composite action (alternative)
 

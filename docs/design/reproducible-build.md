@@ -1,7 +1,6 @@
 # Reproducible-build attestation (v0.4 design)
 
-Status: **draft, not yet implemented**.
-Target version: `v0.4.0`.
+Status: **implemented in v0.4.0**.
 Predecessor: v0.3.0 single-runner integrity anchor (`record-tarball.sh`).
 
 ## Why

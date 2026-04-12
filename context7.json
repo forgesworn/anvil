@@ -12,6 +12,7 @@
     "Node must ship npm >= 11.5.x for OIDC. Trusted publishing configured on npmjs.com must point at the consumer's repo and caller workflow, not forgesworn/anvil.",
     "Exports-map check (verify-exports.sh): jq walks full package.json exports tree (all conditional keys + nested) plus legacy main/module/types/typings/bin. Every ./ leaf path must exist on disk. Runs automatically, no config needed.",
     "Runtime npm audit (verify-audit.sh): runs npm audit --omit=dev --audit-level=$AUDIT_LEVEL. Only runtime deps checked; devDeps ignored. Configure threshold via audit-level input (default: low).",
-    "Action-pin audit (verify-action-pins.sh): scans .github/workflows/*.yml, flags uses: refs not pinned to 40-char SHA. strict-action-pins input (default: true) controls fail vs warn. forgesworn/anvil self-exempt."
+    "Action-pin audit (verify-action-pins.sh): scans .github/workflows/*.yml, flags uses: refs not pinned to 40-char SHA. strict-action-pins input (default: true) controls fail vs warn. forgesworn/anvil self-exempt.",
+    "Auto-release (auto-release.yml): companion workflow, consumed as uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0. Parses conventional commits on push to main, bumps package.json + CHANGELOG, tags, pushes, then fires the consumer's release.yml via workflow_dispatch (gh workflow run). Two-file setup -- consumer's release.yml must declare workflow_dispatch trigger with tag input alongside release: published. Trusted-publisher config unchanged (release.yml remains OIDC entry-point). No PAT needed (workflow_dispatch is an exception to GitHub's GITHUB_TOKEN anti-recursion rule). Release-time inputs (vector-test-command, reproducibility-mode, audit-level, etc.) live on release.yml, not auto-release.yml."
   ]
 }

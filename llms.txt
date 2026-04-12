@@ -5,6 +5,10 @@
 > provenance, pre-publish secret scan, exports-map check, frozen-vector
 > gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1600
 > lines, auditable in thirty minutes.
+>
+> Not to be confused with Foundry's `anvil` (Ethereum dev node) or
+> anvil.works (low-code app platform). This is a GitHub Action for
+> npm release pipelines.
 
 ## What this is
 
@@ -47,6 +51,62 @@ Configure npm trusted publishing on npmjs.com for YOUR repo and YOUR
 caller workflow file (not forgesworn/anvil). Bump package.json,
 tag, push, create a GitHub Release. The workflow handles everything
 else.
+
+## Auto-release (zero-dep semantic-release replacement)
+
+For fully automatic releases from conventional commits on main, add
+an auto-release.yml workflow. It parses commits since the last tag,
+bumps package.json, updates CHANGELOG.md, tags, pushes, and fires
+release.yml via workflow_dispatch.
+
+Auto mode is a two-file setup. Your release.yml must declare a
+workflow_dispatch trigger with a tag input:
+
+```yaml
+name: release
+on:
+  release:
+    types: [published]       # manual flow
+  workflow_dispatch:         # auto flow dispatches here
+    inputs:
+      tag:
+        description: Release tag to publish
+        type: string
+        required: true
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+```
+
+Then add the auto-release caller:
+
+```yaml
+name: auto-release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  actions: write            # required to dispatch release.yml
+jobs:
+  auto-release:
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+```
+
+No PAT needed (workflow_dispatch is an exception to GitHub's anti-
+recursion rule). Trusted-publisher config on npmjs.com continues to
+point at release.yml — the workflow_dispatch bridge preserves
+release.yml as the OIDC entry-point.
+
+All release-time inputs (vector-test-command, reproducibility-mode,
+audit-level, etc.) live on release.yml. auto-release.yml accepts
+only: release-branch, release-workflow, package-json, changelog-file,
+dry-run.
 
 ## Architecture
 
@@ -304,12 +364,14 @@ with:
 | version-strategy | manual | manual: you bump and tag; verify: also checks conventional commits match your bump |
 | reproducibility-mode | strict | strict: block on mismatch; warn: log only; off: skip build-b and reproduce jobs entirely |
 | strict-action-pins | true | Fail on unpinned `uses:` refs in consumer workflows |
+| tag | (empty) | Explicit release tag (e.g. `v1.2.3`). Set by `auto-release.yml`'s workflow_dispatch bridge via `${{ inputs.tag || '' }}`. Empty defaults to `github.event.release.tag_name` for the legacy release-event trigger path. |
 | dry-run | false | Skip real publish |
 | debug | false | Diagnostic logging for OIDC issues |
 
-The composite action (`uses: forgesworn/anvil@v0`) accepts the
-same inputs but does not include the reproducible-build gate (build-b
-and reproduce jobs). Use the reusable workflow for full protection.
+The composite action (`uses: forgesworn/anvil@v0`) accepts the same
+inputs *except* `reproducibility-mode` (the composite cannot run the
+two-build DAG — use the reusable workflow for reproducible-build
+verification).
 
 Composite action callers must add `actions/checkout` before the step
 (the reusable workflow handles checkout internally):

@@ -19,13 +19,18 @@
     "oidc",
     "trusted-publishing",
     "reproducible-builds",
+    "reproducible-build",
     "supply-chain-security",
-    "security",
+    "hardened-release",
     "provenance",
     "slsa",
+    "slsa-provenance",
+    "npm-audit",
+    "secret-scanning",
+    "exports-check",
+    "action-pinning",
     "release",
     "publish",
-    "ci",
     "semver"
   ]
 }

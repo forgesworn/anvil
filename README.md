@@ -1,5 +1,7 @@
 # forgesworn/anvil
 
+*A GitHub Action for hardened npm releases — not to be confused with Foundry's `anvil` (Ethereum dev node) or [anvil.works](https://anvil.works) (low-code app platform).*
+
 [![CI](https://github.com/forgesworn/anvil/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/anvil/actions/workflows/ci.yml)
 
 A release tool for JavaScript library authors who know what version

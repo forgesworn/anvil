@@ -123,6 +123,62 @@ the first time through. See the root README's
 [Trusted publisher caveat](../../README.md#trusted-publisher-caveat-important)
 section for the full story.
 
+## Optional: dual-publish to JSR
+
+To also publish each release to [JSR](https://jsr.io) alongside npm,
+drop a `jsr.json` in the repo root (see the sample in this directory)
+and add a `JSR_TOKEN` repo secret.
+
+```json
+{
+  "name": "@my-scope/my-library",
+  "version": "1.0.0",
+  "exports": "./src/index.ts"
+}
+```
+
+Keep the `version` field in `jsr.json` in lockstep with `package.json`
+— `steps/publish-jsr.sh` fails the release on mismatch. JSR does not
+support OIDC trusted publishing yet, so a token is required (generate
+at [jsr.io/account/tokens](https://jsr.io/account/tokens) with `publish`
+scope; rotate whenever convenient).
+
+Pass the token through from the caller workflow:
+
+```yaml
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+    secrets:
+      JSR_TOKEN: ${{ secrets.JSR_TOKEN }}
+```
+
+The JSR step no-ops when `jsr.json` is absent, so existing npm-only
+consumers are unaffected by upgrading.
+
+## Optional: catch under-bumps with `version-strategy: verify`
+
+If you bump versions manually but want CI to flag when your bump is
+smaller than your commit history implies (e.g. a `feat:` commit but
+only a patch bump), set `version-strategy: verify` on the caller:
+
+```yaml
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+      version-strategy: verify
+```
+
+The action parses conventional commits since the last tag and fails
+the release if the manual bump under-states the change. Intentional
+over-bumps (e.g. major bump for a small fix) warn but do not block.
+This is the middle ground between pure manual control and the fully
+automatic `auto-release.yml` flow.
+
 ## The release loop
 
 ### Manual pattern
