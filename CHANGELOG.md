@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.4 (2026-04-12)
+
+### Docs
+
+- add no-warranty disclaimer near top of README for Marketplace listing
+
 ## 0.8.3 (2026-04-12)
 
 ### Docs

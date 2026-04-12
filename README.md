@@ -5,6 +5,8 @@
 [![CI](https://github.com/forgesworn/anvil/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/anvil/actions/workflows/ci.yml)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/TheCryptoDonkey?logo=githubsponsors&color=ea4aaa&label=Sponsor)](https://github.com/sponsors/TheCryptoDonkey)
 
+*Provided as-is under MIT, no warranty. See [THREAT-MODEL.md](THREAT-MODEL.md) for the defended surfaces and the explicitly undefended ones.*
+
 A release tool for JavaScript library authors who know what version
 they are shipping and want to be sure it ships clean.
 
