@@ -1,12 +1,9 @@
 name: anvil
 description: >-
-  Supply-chain-hardened release tool for JS/TS libraries. Multi-runner
-  reproducible-build attestation, OIDC trusted publishing, provenance,
-  secret scan, exports check, frozen-vector gate, action-pin auditing,
-  optional conventional-commit version verification. Zero dependencies,
-  pure bash, auditable in thirty minutes. NOTE: this composite action
-  does not include the reproducible-build gate (use the reusable
-  workflow at .github/workflows/release.yml for that).
+  Hardened npm publish for JS/TS libraries. OIDC trusted publishing,
+  SLSA provenance, secret scan, exports check, frozen-vector gate,
+  action-pin auditing. Zero dependencies, pure bash, auditable in
+  thirty minutes.
 author: forgesworn
 
 branding:

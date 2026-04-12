@@ -3,6 +3,7 @@
 *A GitHub Action for hardened npm releases — not to be confused with Foundry's `anvil` (Ethereum dev node) or [anvil.works](https://anvil.works) (low-code app platform).*
 
 [![CI](https://github.com/forgesworn/anvil/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/anvil/actions/workflows/ci.yml)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/TheCryptoDonkey?logo=githubsponsors&color=ea4aaa&label=Sponsor)](https://github.com/sponsors/TheCryptoDonkey)
 
 A release tool for JavaScript library authors who know what version
 they are shipping and want to be sure it ships clean.
@@ -604,6 +605,14 @@ Non-goals:
 - Changelog generation as a release-blocking step
 - Node-based tooling inside the action itself
 - Dependencies that are not already on the default GitHub Actions runner image
+
+## Funding
+
+If this action saves your release pipeline a headache and you want to
+support the work, you can sponsor via
+[GitHub Sponsors](https://github.com/sponsors/TheCryptoDonkey) or
+Lightning at [strike.me/thedonkey](https://strike.me/thedonkey). Funding
+goes toward maintenance of this action and the wider forgesworn stack.
 
 ## Licence
 
