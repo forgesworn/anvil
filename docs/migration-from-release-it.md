@@ -41,7 +41,9 @@ jobs:
 ```
 
 If you used release-it's conventional changelog plugin and want to keep
-automatic versioning, also add `.github/workflows/auto-release.yml`:
+automatic versioning, use `.github/workflows/auto-release.yml` **instead**
+of the manual `release.yml` above — it chains into `release.yml`
+internally via `workflow_call`, so you only need one file:
 
 ```yaml
 name: auto-release
@@ -52,6 +54,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   auto-release:

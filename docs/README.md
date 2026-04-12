@@ -13,3 +13,4 @@
 
 - [Tool comparison](comparison.md) -- honest feature matrix against five alternatives
 - [Reproducible build design](design/reproducible-build.md) -- two-runner attestation architecture
+- [Chained workflow design](design/chained-workflows.md) -- why auto-release and release are one CI run, not two

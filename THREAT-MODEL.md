@@ -15,9 +15,13 @@ of the defences listed below, that change needs explicit justification.
 3. **Hard pre-publish gates over automated cleverness.** A failed gate
    refuses the publish. No "best effort" semantics. The release fails
    loudly or it succeeds completely.
-4. **Manual version bump, automated everything else.** A human commits
-   the version bump and CHANGELOG entry. CI handles tag verification,
-   gates, publish, GitHub Release body update.
+4. **Explicit human intent, automated everything else.** Either a
+   human commits the version bump and CHANGELOG entry manually
+   (manual mode), or a human pushes conventional-commit messages
+   that CI parses into a bump (auto mode). Either way, a traceable
+   human commit is the trigger; CI handles tag verification, gates,
+   publish, and GitHub Release body. No scheduled releases, no
+   "publish on timer".
 5. **The action source must be auditable in under thirty minutes total.**
    Currently ~1600 lines of bash across all step scripts.
 
@@ -32,7 +36,8 @@ of the defences listed below, that change needs explicit justification.
 | Accidental break of a frozen protocol output | `verify-vectors` runs the consumer's configured frozen-vector command and refuses the publish if it exits non-zero. |
 | Drift between declared `exports` and files on disk | `verify-exports` walks every exports subpath plus legacy `main`/`module`/`types`/`bin` entries and refuses the publish if any target is missing. |
 | Runtime dependency with a known advisory shipping to production | `verify-audit` runs `npm audit --omit=dev` at `low` level by default. Dev-dep noise does not block; runtime issues do. |
-| Maintainer accidentally pushing the wrong commit | GitHub Release trigger forces explicit, reviewable action. The maintainer creates the Release manually and the action runs only in response. |
+| Maintainer accidentally pushing the wrong commit | In manual mode, the GitHub Release trigger forces an explicit, reviewable action — the maintainer creates the Release and the action runs only in response. In auto mode, a conventional commit on main is the explicit human action, and the chained workflow (see `docs/design/chained-workflows.md`) runs in one CI run. Either way, a real human commit is the trigger; there is no scheduled or background release path. |
+| Consumer repo leaking a PAT used to bridge the auto-release → release.yml event chain | Replaced event coupling with `workflow_call` coupling in v0.6. The chained auto-release flow needs no PAT — one workflow run, one `GITHUB_TOKEN`, no long-lived credential in the consumer repo. Legacy `GH_TOKEN` secret is still accepted but silently unused; a stale PAT in a consumer repo no longer weakens anything. |
 | Supply-chain attack via the action's own transitive dependencies | The action has no Node dependencies. It invokes `bash`, `jq`, `gh`, `npm`, and `sed`/`awk`/`find`/`grep` from the GitHub-managed runner image. No fetched binaries. |
 | Race between parallel releases publishing the same version twice | `publish-npm` is idempotent: if the exact version is already on the registry, it exits `0` without re-publishing. |
 | Registry tarball substitution between publish and consumer fetch | `record-tarball` packs the artefact once and writes its sha512 (npm integrity format) plus sha256 to a meta file. `publish-npm` uploads that exact tarball — not a re-pack — and on a clean re-run compares the registry's `dist.integrity` to the recorded value: a mismatch fails the workflow loudly. The hashes are also stamped into the GitHub Release body so consumers can `curl | shasum` the registry tarball at any time. |

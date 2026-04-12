@@ -5,6 +5,12 @@ library that publishes to npm.
 
 ## Caller workflow
 
+Two patterns — pick one based on whether you want manual or automatic
+releases. They are mutually exclusive; use one file or the other, not
+both.
+
+### Manual (maintainer creates Release)
+
 `.github/workflows/release.yml`:
 
 ```yaml
@@ -25,8 +31,41 @@ jobs:
       vector-test-command: npm run test:vectors
 ```
 
-Five lines of actual configuration. Drop `vector-test-command` if your
-library has no frozen test vectors.
+You bump `package.json`, update CHANGELOG, tag, push, and create a
+GitHub Release; the action takes over from there. See "The release
+loop" below for the full sequence.
+
+### Auto (conventional commits on main trigger release)
+
+`.github/workflows/auto-release.yml`:
+
+```yaml
+name: auto-release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  auto-release:
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+    with:
+      vector-test-command: npm run test:vectors
+```
+
+You push conventional commits (`feat:`, `fix:`, `feat!:` for majors)
+to main. The workflow parses, bumps, tags, pushes, and publishes —
+all in one CI run. No separate `release.yml` needed; `auto-release.yml`
+chains into `release.yml` internally via `workflow_call`, no PAT
+required. See [`../../docs/design/chained-workflows.md`](../../docs/design/chained-workflows.md)
+for the architecture.
+
+Drop `vector-test-command` in either snippet if your library has no
+frozen test vectors.
 
 ## `package.json` essentials
 
@@ -77,8 +116,9 @@ One-off setup on `npmjs.com`:
 1. Go to your package's Settings -> Trusted Publisher.
 2. Add a GitHub Actions publisher with:
    - **Repository**: your package's repo (not `forgesworn/anvil`)
-   - **Workflow filename**: `release.yml` (your caller workflow,
-     not the reusable one)
+   - **Workflow filename**: your caller workflow — `release.yml` for
+     the manual pattern, `auto-release.yml` for the auto pattern.
+     **Not** the reusable workflow inside `forgesworn/anvil`.
    - **Environment**: leave empty
 
 npm matches against the OIDC token's `workflow_ref` claim (the caller),
@@ -90,12 +130,26 @@ section for the full story.
 
 ## The release loop
 
+### Manual pattern
+
 1. Bump `package.json` version manually.
 2. Add a CHANGELOG entry under a heading containing the new version.
 3. Commit, tag (`git tag v1.5.0`), push (`git push && git push --tags`).
 4. Create a GitHub Release pointing at the tag (placeholder body is fine,
    the action replaces it).
 5. Watch the `release` workflow. Green = published with provenance.
+
+### Auto pattern
+
+1. Write commits with conventional prefixes on main:
+   - `feat: ...` → minor bump
+   - `fix: ...` → patch bump
+   - `feat!: ...` or `BREAKING CHANGE:` in body → major bump
+2. Push to `main`.
+3. Watch the `auto-release` workflow: `determine → commit-and-tag →
+   publish`. Green = version bumped, tagged, published, Release
+   created with the integrity block.
+4. That's it. No local commands, no manual tagging.
 
 ## Further reading
 

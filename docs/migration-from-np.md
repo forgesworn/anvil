@@ -106,8 +106,11 @@ git tag v1.2.0 && git push --tags
 # CI takes over: gates, reproducible build, OIDC publish, provenance
 ```
 
-Or if you want automatic versioning, add the companion
-`auto-release.yml` workflow and just push conventional commits.
+Or if you want automatic versioning, use the `auto-release.yml`
+workflow instead (single file, no separate `release.yml` needed —
+it chains internally via `workflow_call`) and just push
+conventional commits. See the README's "Version strategy → Auto"
+section.
 
 ## What changes
 

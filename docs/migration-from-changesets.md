@@ -41,7 +41,10 @@ jobs:
 ```
 
 If you want automatic versioning from conventional commits (closest to
-the changesets experience), also add `.github/workflows/auto-release.yml`:
+the changesets experience), use `.github/workflows/auto-release.yml`
+**instead** of the manual `release.yml` above — `auto-release.yml`
+chains into `release.yml` internally via `workflow_call`, so you only
+need one file:
 
 ```yaml
 name: auto-release
@@ -52,6 +55,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   auto-release:

@@ -144,8 +144,8 @@ under-bumps that would ship breaking changes in a patch.
 
 The companion `auto-release.yml` workflow replaces `semantic-release`
 entirely. It runs on push, parses conventional commits, determines the
-bump, updates `package.json` and `CHANGELOG.md`, tags, and creates a
-GitHub Release -- which triggers the main release pipeline.
+bump, updates `package.json` and `CHANGELOG.md`, tags, pushes, and
+publishes -- all inside one workflow run.
 
 Create `.github/workflows/auto-release.yml`:
 
@@ -156,31 +156,35 @@ on:
     branches: [main]
 permissions:
   contents: write
+  id-token: write
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+    with:
+      vector-test-command: npm run test:vectors  # optional
 ```
 
-And keep your existing `release.yml` (the publish pipeline) alongside
-it. Push conventional commits to `main`; releases happen automatically
-when warranted. Zero dependencies, zero config files.
+That's it. You do **not** need a separate `release.yml` in your repo
+— `auto-release.yml` chains into `release.yml` internally via
+`workflow_call`, all in one run. Push conventional commits to `main`;
+releases happen automatically when warranted. Zero dependencies, zero
+config files, no PAT.
 
-**Note:** The default `GITHUB_TOKEN` can create releases but cannot
-trigger further workflow runs. If you need the auto-created release to
-trigger `release.yml` automatically, pass a GitHub App token or PAT
-with `contents: write` scope via the `GH_TOKEN` secret:
+**Migration note for existing consumers.** If you had trusted publishing
+configured against a separate `release.yml` caller workflow, update the
+"Workflow filename" on npmjs.com to point at `auto-release.yml` — OIDC
+subjects come from the entry-point caller. Your old `release.yml` file
+can be deleted; its `release: published` trigger will no longer fire in
+the chained flow (the Release is now created by `release.yml` itself,
+after a successful publish).
 
-```yaml
-jobs:
-  auto-release:
-    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
-    secrets:
-      GH_TOKEN: ${{ secrets.RELEASE_PAT }}
-```
-
-Store the PAT as a repo secret (e.g. `RELEASE_PAT`). Without this,
-the created Release still appears in GitHub but won't trigger
-`release.yml`.
+**Why no PAT?** `auto-release.yml` calls `release.yml` via
+`workflow_call`, not by firing a release event. GitHub's anti-recursion
+rule suppresses workflow runs from events created by `GITHUB_TOKEN`
+(tag pushes, Release creation), which is why the old event-based design
+required a PAT. `workflow_call` is not an event, so the rule doesn't
+apply. See [`docs/design/chained-workflows.md`](docs/design/chained-workflows.md)
+for the architecture.
 
 ## What the action does
 
@@ -269,6 +273,13 @@ no reproducibility check). Use the reusable workflow as the default.
 
 ## Inputs
 
+All inputs in the table below are accepted by **both** `release.yml`
+and `auto-release.yml` (when you use the Auto version strategy,
+`auto-release.yml` plumbs them through to its chained `release.yml`
+call). `auto-release.yml` additionally accepts a `release-branch`
+input (defaults to `main`). `version-strategy` is **not** accepted
+by `auto-release.yml` — auto-release *is* the strategy.
+
 | Input | Default | Description |
 |---|---|---|
 | `node-version` | `24.11.0` | Node version used for npm operations (must ship with npm >= 11.5.1 for OIDC trusted publishing) |
@@ -278,9 +289,10 @@ no reproducibility check). Use the reusable workflow as the default.
 | `changelog-file` | `CHANGELOG.md` | Path to CHANGELOG |
 | `package-json` | `package.json` | Path to package.json |
 | `audit-level` | `low` | `npm audit` severity floor |
-| `version-strategy` | `manual` | One of `manual`, `verify`. `manual` is the default: you bump, you tag, the action publishes. `verify` parses conventional commits and fails if your bump is smaller than what the commits imply. For fully automatic versioning, use the companion `auto-release.yml` workflow instead. |
+| `version-strategy` | `manual` | `release.yml` only. One of `manual`, `verify`. `manual` is the default: you bump, you tag, the action publishes. `verify` parses conventional commits and fails if your bump is smaller than what the commits imply. For fully automatic versioning, use the companion `auto-release.yml` workflow instead. |
 | `strict-action-pins` | `true` | If `true` (the default), **verify-action-pins** fails the release on any unpinned `uses:` reference in `.github/workflows`. Set to `false` for warn-only mode. `forgesworn/anvil` is exempt by name. |
 | `reproducibility-mode` | `strict` | Reusable workflow only. One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). The composite action silently ignores this input (it cannot run the two-build DAG; see "Advanced: composite action directly"). |
+| `tag` | *(empty)* | `release.yml` only. Explicit release tag (e.g. `v1.2.3`). Used by `auto-release.yml`'s chained publish job to pass the freshly-created tag. Empty defaults to `github.event.release.tag_name`, preserving the legacy release-event trigger path. |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
 | `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors -- see "Trusted publisher caveat". Does not print token values. |
 
@@ -289,7 +301,7 @@ no reproducibility check). Use the reusable workflow as the default.
 | Secret | When needed |
 |---|---|
 | `JSR_TOKEN` | Only if `jsr.json` exists. JSR does not yet support OIDC. |
-| `GH_TOKEN` | Only for `auto-release.yml` when you want the auto-created Release to trigger `release.yml`. See "Version strategy -> Auto". |
+| `GH_TOKEN` | Deprecated. Previously bridged the auto-release -> release.yml event gap before chained workflows. No longer required; silently ignored in the chained publish path. Safe to remove from caller workflows. |
 
 ### JSR_TOKEN setup
 

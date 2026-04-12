@@ -35,10 +35,13 @@ jobs:
     # ... followed by a conditional npm publish step
 ```
 
-Replace it with two workflows.
+Replace it with a single workflow. `auto-release.yml` parses your
+conventional commits, bumps, tags, pushes, and publishes — all in
+one CI run by chaining into `release.yml` internally via
+`workflow_call`:
 
 **`.github/workflows/auto-release.yml`** (replaces release-please's
-version determination + tagging):
+version determination, tagging, **and** publish):
 
 ```yaml
 name: auto-release
@@ -47,25 +50,10 @@ on:
     branches: [main]
 permissions:
   contents: write
+  id-token: write
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
-```
-
-**`.github/workflows/release.yml`** (the publish pipeline, triggered
-by the auto-release creating a GitHub Release):
-
-```yaml
-name: release
-on:
-  release:
-    types: [published]
-permissions:
-  contents: write
-  id-token: write
-jobs:
-  release:
-    uses: forgesworn/anvil/.github/workflows/release.yml@v0
 ```
 
 ### 2. Remove release-please configuration

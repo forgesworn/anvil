@@ -187,9 +187,12 @@ context at all or has it but cannot match the trusted publisher.
   dependencies.
 
 That is genuinely it. If you liked the automatic versioning from
-commit messages, add the companion `auto-release.yml` workflow alongside
-`release.yml` and you get the same behaviour with zero dependencies. If you want manual control
-with a safety net, use `version-strategy: verify` -- the action
-parses your conventional commits and fails if your bump is smaller
-than what the commits imply. See the README's "Version strategy"
-section for setup.
+commit messages, use the companion `auto-release.yml` workflow
+(single-file, no separate `release.yml` needed — it chains into
+`release.yml` internally via `workflow_call`). Same behaviour as
+`semantic-release`, zero dependencies, no PAT.
+
+If you want manual control with a safety net, use
+`version-strategy: verify` -- the action parses your conventional
+commits and fails if your bump is smaller than what the commits
+imply. See the README's "Version strategy" section for setup.
