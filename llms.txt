@@ -146,6 +146,150 @@ All six paths (four from exports, two from legacy main/types) must exist
 after the build step. If `./dist/utils.mjs` is missing, the release is
 blocked.
 
+## Runtime-only npm audit (verify-audit.sh)
+
+Runs `npm audit --omit=dev` so that devDependency advisories do not
+block releases, but any advisory in the runtime dependency tree does.
+This is the opposite of tools like semantic-release, which audit
+everything and drown you in devDep noise that has zero impact on
+consumers of your published package.
+
+### How it works
+
+The script runs a single command:
+
+```sh
+npm audit --omit=dev --audit-level=$level
+```
+
+The `--omit=dev` flag tells npm to evaluate only production dependencies
+(those in `dependencies`, not `devDependencies`). If npm finds any
+advisory at or above the configured severity level, it exits non-zero
+and the release is blocked.
+
+### Configuration
+
+The `audit-level` input (default: `low`) controls the severity
+threshold. Valid values are `low`, `moderate`, `high`, and `critical`.
+For security-sensitive libraries (cryptography, authentication,
+payments), the default of `low` is intentional: even low-severity
+runtime advisories are worth investigating before publishing.
+
+```yaml
+uses: forgesworn/anvil/.github/workflows/release.yml@v0
+with:
+  audit-level: moderate   # only block on moderate or above
+```
+
+### What it checks and what it ignores
+
+- **Checked**: all packages in `dependencies` (the runtime tree that
+  ships to consumers)
+- **Ignored**: all packages in `devDependencies` (build tools, test
+  frameworks, linters -- these never reach consumers)
+
+No additional configuration in `package.json` is required. The check
+runs automatically as part of the build-a job.
+
+## Tarball hash stamping (record-tarball.sh + update-release.sh)
+
+After all pre-publish gates pass and the package is published to npm,
+anvil stamps the registry tarball's cryptographic hashes into the GitHub
+Release body and uploads the tarball as a release asset. This gives
+consumers two independent sources for the bytes (npm registry + GitHub
+Releases) and a way to verify they match.
+
+### How it works (two-step process)
+
+**Step 1 -- record-tarball.sh** (runs in the build job):
+
+1. Derives `SOURCE_DATE_EPOCH` from the git commit timestamp
+2. Normalises all file mtimes to that epoch (for reproducibility)
+3. Runs `npm pack --json` to produce the canonical tarball
+4. Computes sha256 via `shasum -a 256`
+5. Extracts the npm integrity value (sha512) from `npm pack --json`
+6. Writes all metadata to `tarball.meta` (key=value format):
+   `filename`, `size`, `sha256`, `integrity`
+
+**Step 2 -- update-release.sh** (runs in the publish job):
+
+1. Extracts the changelog section for this version
+2. Reads `tarball.meta` and appends an "Artefact integrity" block:
+
+```
+---
+
+## Artefact integrity
+
+file:      my-package-1.2.0.tgz
+size:      12345 bytes
+sha256:    abc123...
+sha512-base64...
+
+Verify against the registry tarball:
+
+curl -sLO https://registry.npmjs.org/my-package/-/my-package-1.2.0.tgz
+shasum -a 256 my-package-1.2.0.tgz
+```
+
+3. If the reproducible-build gate confirmed two independent builds
+   matched, a "Reproducible build" badge is added above the block
+4. Uploads the tarball as a GitHub Release asset via `gh release upload`
+
+### Configuration
+
+No configuration required. The stamping runs automatically whenever the
+publish job succeeds. The integrity block appears in the GitHub Release
+body and the tarball appears as a downloadable release asset.
+
+### What consumers can verify
+
+A consumer can download the tarball from the npm registry and compare
+its sha256 against the value stamped in the GitHub Release body. If the
+hashes match, the bytes on npm are the same bytes CI built. If the
+reproducible-build badge is present, those bytes were also confirmed
+identical across two independent CI runners.
+
+## Action-pin auditing (verify-action-pins.sh)
+
+Walks `.github/workflows/*.yml` in the consumer's repository and flags
+every `uses: owner/repo@ref` reference whose ref is not a 40-character
+hex SHA. This catches the supply-chain risk where a tag-pinned action
+(`@v4`) can be silently re-pointed at malicious code -- the same vector
+that hit `tj-actions/changed-files` in March 2025.
+
+### How it works
+
+For each workflow file, the script extracts every `uses:` line and
+checks whether the `@ref` portion is a full 40-character commit SHA.
+References that use tags (`@v4`), branches (`@main`), or short SHAs are
+flagged as unpinned.
+
+Special cases:
+- **Local actions** (`./ paths`): skipped (resolved from the same repo)
+- **forgesworn/anvil**: self-exempt to avoid circular failure, but warns
+  if the consumer has not SHA-pinned anvil itself
+- **Docker references**: checks for `sha256:` digest pinning
+
+### Configuration
+
+The `strict-action-pins` input (default: `true`) controls whether
+unpinned references block the release or only warn:
+
+```yaml
+uses: forgesworn/anvil/.github/workflows/release.yml@v0
+with:
+  strict-action-pins: true    # fail on unpinned refs (default)
+  strict-action-pins: false   # warn only, do not block
+```
+
+### Output
+
+- Warning per unpinned ref: `unpinned action: .github/workflows/ci.yml:12  actions/setup-node@v4`
+- In strict mode: `error: N unpinned action reference(s) found`
+  and exit 1 (release blocked)
+- In warn mode: logs the count and suggests SHA pins, but exits 0
+
 ## Key inputs (reusable workflow)
 
 | Input | Default | Purpose |
