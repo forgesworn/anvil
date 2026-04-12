@@ -198,6 +198,25 @@ EOF
   [[ "$output" == *"missing integrity"* ]]
 }
 
+@test "publish-npm: rejects path traversal in meta filename" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  write_package_json '{"name":"test-pkg","version":"1.0.0"}'
+  cat > "$meta_dir/tarball.meta" <<'EOF'
+filename=../../etc/passwd
+path=/tmp/test-pkg-1.0.0.tgz
+size=1234
+sha256=abc
+integrity=sha512-LOCAL
+EOF
+  : > "$meta_dir/../../etc/passwd" 2>/dev/null || true
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"suspicious filename"* ]]
+  ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
+}
+
 @test "publish-npm: scoped package publishes the unscoped-prefixed local pack" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
 

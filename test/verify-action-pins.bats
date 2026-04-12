@@ -79,7 +79,7 @@ jobs:
   [[ "$output" == *"strict-action-pins enabled"* ]]
 }
 
-@test "verify-action-pins: forgesworn/release-action is exempt by name" {
+@test "verify-action-pins: forgesworn/release-action is exempt but warns when not SHA-pinned" {
   write_workflow release.yml '
 jobs:
   release:
@@ -89,7 +89,45 @@ jobs:
 '
   STRICT_ACTION_PINS=1 run "$ACTION_ROOT/steps/verify-action-pins.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"unpinned action"* ]]
+  [[ "$output" == *"forgesworn/release-action is not SHA-pinned"* ]]
+}
+
+@test "verify-action-pins: forgesworn/release-action SHA-pinned produces no warning" {
+  write_workflow release.yml '
+jobs:
+  release:
+    uses: forgesworn/release-action/.github/workflows/release.yml@abcdef0123456789abcdef0123456789abcdef01
+'
+  STRICT_ACTION_PINS=1 run "$ACTION_ROOT/steps/verify-action-pins.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"forgesworn/release-action is not SHA-pinned"* ]]
+}
+
+@test "verify-action-pins: docker:// tag-ref action is flagged as unpinned" {
+  write_workflow ci.yml '
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: docker://ghcr.io/some-image@latest
+'
+  run "$ACTION_ROOT/steps/verify-action-pins.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unpinned container action"* ]]
+}
+
+@test "verify-action-pins: docker:// digest-pinned action is not flagged" {
+  write_workflow ci.yml '
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: docker://ghcr.io/some-image@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+'
+  STRICT_ACTION_PINS=1 run "$ACTION_ROOT/steps/verify-action-pins.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unpinned container action"* ]]
+  [[ "$output" == *"0 unpinned"* ]]
 }
 
 @test "verify-action-pins: local ./action references are not flagged" {
