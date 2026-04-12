@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 (2026-04-12)
+
+### Features
+
+- bridge auto-release to release.yml via workflow_dispatch
+
+
+
 ## 0.7.0 (2026-04-12)
 
 ### Features
