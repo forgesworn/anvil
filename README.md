@@ -143,11 +143,14 @@ under-bumps that would ship breaking changes in a patch.
 ### Auto
 
 The companion `auto-release.yml` workflow replaces `semantic-release`
-entirely. It runs on push, parses conventional commits, determines the
-bump, updates `package.json` and `CHANGELOG.md`, tags, pushes, and
-publishes -- all inside one workflow run.
+entirely. On push to `main` it parses conventional commits, bumps
+`package.json`, updates `CHANGELOG.md`, tags, pushes, and dispatches
+your `release.yml` to publish.
 
-Create `.github/workflows/auto-release.yml`:
+Two files in your repo.
+
+**`.github/workflows/auto-release.yml`** — parses commits, bumps, tags,
+dispatches:
 
 ```yaml
 name: auto-release
@@ -156,34 +159,50 @@ on:
     branches: [main]
 permissions:
   contents: write
-  id-token: write
+  actions: write            # required to dispatch release.yml
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
-    with:
-      vector-test-command: npm run test:vectors  # optional
 ```
 
-That's it. You do **not** need a separate `release.yml` in your repo
-— `auto-release.yml` chains into `release.yml` internally via
-`workflow_call`, all in one run. Push conventional commits to `main`;
-releases happen automatically when warranted. Zero dependencies, zero
-config files, no PAT.
+**`.github/workflows/release.yml`** — runs gates, publishes npm, creates
+the GitHub Release. Must declare a `workflow_dispatch` trigger so
+`auto-release.yml` can fire it:
 
-**Migration note for existing consumers.** If you had trusted publishing
-configured against a separate `release.yml` caller workflow, update the
-"Workflow filename" on npmjs.com to point at `auto-release.yml` — OIDC
-subjects come from the entry-point caller. Your old `release.yml` file
-can be deleted; its `release: published` trigger will no longer fire in
-the chained flow (the Release is now created by `release.yml` itself,
-after a successful publish).
+```yaml
+name: release
+on:
+  release:
+    types: [published]       # manual flow: you create the Release
+  workflow_dispatch:         # auto flow: auto-release dispatches
+    inputs:
+      tag:
+        description: Release tag to publish
+        type: string
+        required: true
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+      vector-test-command: npm run test:vectors   # optional
+```
 
-**Why no PAT?** `auto-release.yml` calls `release.yml` via
-`workflow_call`, not by firing a release event. GitHub's anti-recursion
-rule suppresses workflow runs from events created by `GITHUB_TOKEN`
-(tag pushes, Release creation), which is why the old event-based design
-required a PAT. `workflow_call` is not an event, so the rule doesn't
-apply. See [`docs/design/chained-workflows.md`](docs/design/chained-workflows.md)
+Push conventional commits to `main`; releases happen automatically.
+Zero dependencies, zero config files, no PAT. Trusted-publisher config
+on npmjs.com continues to point at `release.yml` — the `workflow_dispatch`
+bridge preserves the OIDC entry-point, so your existing setup keeps
+working.
+
+**Why no PAT?** `auto-release.yml` fires `release.yml` via
+`gh workflow run`, i.e. a `workflow_dispatch` event. GitHub's
+anti-recursion rule suppresses most events created by the default
+`GITHUB_TOKEN`, but `workflow_dispatch` and `repository_dispatch` are
+explicit exceptions and do trigger workflow runs. No long-lived
+credential needed. See [`docs/design/chained-workflows.md`](docs/design/chained-workflows.md)
 for the architecture.
 
 ## What the action does
@@ -273,12 +292,12 @@ no reproducibility check). Use the reusable workflow as the default.
 
 ## Inputs
 
-All inputs in the table below are accepted by **both** `release.yml`
-and `auto-release.yml` (when you use the Auto version strategy,
-`auto-release.yml` plumbs them through to its chained `release.yml`
-call). `auto-release.yml` additionally accepts a `release-branch`
-input (defaults to `main`). `version-strategy` is **not** accepted
-by `auto-release.yml` — auto-release *is* the strategy.
+All inputs in the table below belong to `release.yml`. `auto-release.yml`
+only handles the parse-bump-tag-dispatch side; it accepts a small set
+of its own inputs (`release-branch`, `release-workflow`, `package-json`,
+`changelog-file`, `dry-run`) and otherwise stays out of release-time
+configuration — that lives on `release.yml` because the `workflow_dispatch`
+bridge fires `release.yml` as the entry-point workflow.
 
 | Input | Default | Description |
 |---|---|---|

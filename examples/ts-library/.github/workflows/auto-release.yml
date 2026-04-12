@@ -1,20 +1,16 @@
-# Single-file auto-release caller for forgesworn/anvil.
+# Auto-release caller for forgesworn/anvil.
 # Place this in YOUR library at .github/workflows/auto-release.yml.
-# You do NOT need a separate release.yml alongside this — auto-release.yml
-# chains into release.yml internally via workflow_call, so one file
-# covers both the bump-and-tag and the publish.
+# Requires a sibling release.yml with a workflow_dispatch trigger +
+# tag input — see the sample release.yml in this example.
 #
-# Prerequisites:
-#   1. Configure npm trusted publishing on npmjs.com for THIS repo
-#      (not forgesworn/anvil) pointing at THIS workflow file
-#      (auto-release.yml, not release.yml).
-#   2. Use conventional commits on main. Push, and anvil takes over:
-#      parses commits, bumps package.json, tags, pushes, publishes —
-#      all in one CI run.
+# On push to main, this workflow parses conventional commits since
+# the last tag, and if a release is warranted, bumps package.json,
+# updates CHANGELOG, tags, pushes, and dispatches release.yml to
+# publish. One push → one auto-release run → one dispatched release
+# run. No PAT required.
 #
-# If you prefer manual release control, delete this file and use the
-# sibling release.yml instead. The two patterns are mutually exclusive
-# for most consumers — pick one.
+# If you prefer manual control, delete this file and use the sibling
+# release.yml directly.
 
 name: auto-release
 on:
@@ -23,10 +19,8 @@ on:
 
 permissions:
   contents: write
-  id-token: write
+  actions: write            # required to dispatch release.yml
 
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
-    with:
-      vector-test-command: npm run test:vectors

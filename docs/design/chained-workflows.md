@@ -1,240 +1,245 @@
-# Chained workflows (v0.6 design)
+# Chained workflows (v0.8 design)
 
-Status: **implemented in v0.6.0**.
-Predecessor: v0.5.0 event-coupled auto-release + optional PAT.
+Status: **implemented in v0.8.0**.
+Predecessors:
+- v0.5.0 event-coupled auto-release + optional PAT (broken without PAT)
+- v0.7.0 workflow_call chain (forced trusted-publisher reconfiguration)
 
 ## Why
 
-`auto-release.yml` drops a tag and a GitHub Release on push to main.
-`release.yml` runs the gates and publishes to npm. In v0.5 the two
-were coupled by an event: auto-release's `gh release create` fired a
-`release: published` event that was supposed to trigger release.yml.
+`auto-release.yml` determines a bump from conventional commits and
+tags a new release. `release.yml` runs the gates and publishes to
+npm. The two need to be connected. Two bad connections, one good one:
 
-That coupling only closes for consumers who provide a PAT.
+### The event-coupling design (v0.5)
 
-GitHub Actions has an anti-recursion rule: **events created by the
-default `GITHUB_TOKEN` do not trigger workflow runs**. A tag push
-authored by `github-actions[bot]`, a release created by the workflow,
-an issue comment posted by the workflow — all silent. The rule exists
-because without it a single workflow could loop itself infinitely on
-commit. But it also breaks the perfectly legitimate case of
-"workflow A's output should trigger workflow B".
+Auto-release ran `gh release create`. The release-published event
+was supposed to fire `release.yml`. It didn't: GitHub's anti-
+recursion rule suppresses workflow runs from events created by
+the default `GITHUB_TOKEN`. The workaround was a PAT, which
+contradicts the zero-secret design posture and added silent-failure
+surprise ("nothing happened, why?") for anyone without one
+configured.
 
-The workaround was to provide a PAT (or GitHub App token) via the
-`GH_TOKEN` secret. Acts on behalf of a real user, so GitHub considers
-the events "human-authored" and lets them trigger workflows. Two
-problems:
+### The workflow_call chain (v0.7)
 
-1. **Secret sprawl.** Every consumer repo needs a PAT configured,
-   stored, rotated, audited. `anvil`'s entire design posture is
-   zero-secret (OIDC trusted publishing, `GITHUB_TOKEN` for git). A
-   required PAT contradicts that posture.
-2. **Opaque failure.** A consumer without a PAT sees auto-release
-   succeed (tag pushed, Release created) and nothing else happen.
-   The npm publish silently fails to fire. The maintainer has to
-   dig through docs to understand why.
+Auto-release called `release.yml` directly via `uses:` — a
+reusable-workflow chain, not an event. No PAT needed. But the OIDC
+subject for npm trusted publishing comes from the **entry-point
+caller's** `workflow_ref`, which in the chained flow is
+`auto-release.yml`, not `release.yml`. Every consumer would have
+had to reconfigure their trusted publisher on npmjs.com to point at
+`auto-release.yml`. A 20-package migration ball-ache for no real
+benefit.
 
-## What "chained workflows" means here
+### The workflow_dispatch bridge (v0.8)
 
-Replace the event coupling with a `workflow_call` coupling. Inside
-a single workflow run, `auto-release.yml` invokes `release.yml`
-directly via `uses:`, passing the newly-pushed tag as an explicit
-input. No event is created; the anti-recursion rule does not apply.
+Auto-release does bump + tag + push, then runs:
 
-The DAG:
+```sh
+gh workflow run release.yml -f tag=v1.2.3
+```
+
+That fires the consumer's `release.yml` as a **separate workflow
+run**. Crucially:
+
+- `workflow_dispatch` is an **explicit exception** to the anti-
+  recursion rule. The GitHub docs call this out: "events triggered
+  by the `GITHUB_TOKEN`, with the exception of `workflow_dispatch`
+  and `repository_dispatch`, will not create a new workflow run."
+  So no PAT is needed.
+- The OIDC subject is `release.yml` (the entry-point of the
+  dispatched run). Existing trusted-publisher configuration keeps
+  working with no change.
+
+One human push to main → one auto-release run → one dispatched
+release run. Two workflow runs visible in the Actions tab, but only
+one of them requires human setup (trusted publisher on
+`release.yml`, the same as manual mode).
+
+## What the design actually is
 
 ```
   push to main
         │
         ▼
-  auto-release.yml (one workflow run)
+  auto-release.yml (run #1, fires on push)
         │
-   ┌────┴─────────────────────────────────────────┐
-   │                                              │
-   ▼                                              ▼
-determine                                    commit-and-tag
-(parse commits)                              (bump, commit, tag, push)
-                                                   │
-                                                   ▼
-                                              publish
-                                              (uses: release.yml@v0)
-                                                   │
-                                            ┌──────┴──────┬─────────┐
-                                            │             │         │
-                                            ▼             ▼         ▼
-                                          build-a      build-b   reproduce
-                                                                     │
-                                                                     ▼
-                                                                  publish
-                                                                (npm + GH Release)
+   ┌────┴─────────────────────────────────────┐
+   │                                          │
+   ▼                                          ▼
+determine                                 commit-and-tag
+(parse commits)                           (bump, commit, tag, push)
+                                               │
+                                               ▼
+                                          dispatch-release
+                                          (gh workflow run release.yml -f tag=vX.Y.Z)
+                                               │
+                                               ▼  (workflow_dispatch event,
+                                                   not suppressed)
+  release.yml (run #2, fires on workflow_dispatch)
+        │
+   ┌────┴─────────────────────────────────────┐
+   │                                          │
+   ▼                                          ▼
+release (uses: forgesworn/anvil/.github/workflows/release.yml@v0)
+        │
+ ┌──────┴──────┬──────────┐
+ │             │          │
+ ▼             ▼          ▼
+build-a    build-b    reproduce
+                          │
+                          ▼
+                       publish (npm + GH Release create)
 ```
 
-One run. No tokens beyond the default `GITHUB_TOKEN` and the OIDC
-subject npm issues to the caller workflow. The Release body is
-created by `update-release.sh` after a successful publish, not by
-`auto-release.yml` up-front — moved for a good reason, see §
-"Release ownership" below.
+Two runs, clean separation. The manual flow is unchanged: a human
+creates a GitHub Release, that event fires `release.yml` directly.
+The auto flow just dispatches the same entry point.
 
-## What changed
+## Consumer-side contract
 
-### `release.yml` gains a `tag` input
+The consumer writes two files:
 
-Optional string, defaults to `''`. When set, `release.yml`:
+```yaml
+# .github/workflows/auto-release.yml
+name: auto-release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  actions: write            # required to dispatch
+jobs:
+  auto-release:
+    uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+```
 
-- Uses it as the `ref:` for `actions/checkout` in `build-a`,
-  `build-b`, and `publish`.
-- Passes it as `GIT_TAG` env to step scripts.
+```yaml
+# .github/workflows/release.yml
+name: release
+on:
+  release:
+    types: [published]       # manual flow: human creates Release
+  workflow_dispatch:         # auto flow: auto-release dispatches
+    inputs:
+      tag:
+        description: Release tag to publish (e.g. v1.2.3)
+        type: string
+        required: true
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+      vector-test-command: npm run test:vectors  # optional
+```
 
-When empty, falls back to `github.event.release.tag_name` —
-preserving the legacy release-event trigger path unchanged.
+The `workflow_dispatch` trigger with a `tag` input is the new
+requirement. `release.yml` was already trigger-agnostic as of v0.7
+(accepts `tag` input, falls back to `github.event.release.tag_name`).
 
-The input is the single most important piece of the refactor.
-Without it, `release.yml` cannot be called from a context that
-doesn't have a release-event payload, and the chain breaks. With
-it, `release.yml` is trigger-agnostic: anything that can name a
-tag can drive it.
+## What changed from v0.7 to v0.8
 
-### `auto-release.yml` gains a `publish` job
-
-Replaces the single monolithic `release` job with three:
-
-- `determine` — parse conventional commits (unchanged).
-- `commit-and-tag` — bump `package.json`, update CHANGELOG, commit,
-  tag, push. **No longer creates a GitHub Release.**
-- `publish` — `uses: forgesworn/anvil/.github/workflows/release.yml@v0`
-  with the freshly-created tag passed in explicitly.
-
-The self-reference `@v0` is a literal — GitHub Actions does not
-allow expressions in reusable-workflow `uses:`. A consumer who
-pins `auto-release.yml@v0` implicitly commits to `release.yml@v0`.
-They travel as a pair. SHA-pinning one pins the other.
-
-### `update-release.sh` gains create-or-update
-
-Today's script runs `gh release edit` after publish, updating the
-Release body with the CHANGELOG section and integrity block. The
-script assumes a Release already exists — reasonable for the
-manual flow where the release-event is the trigger.
-
-In the chained flow no Release exists when `update-release.sh`
-runs; `auto-release.yml` pushed a tag, then `release.yml` took
-over. The script now probes with `gh release view` and branches:
-
-- `view` succeeds → `gh release edit` (legacy path, unchanged).
-- `view` fails → `gh release create` with `--target $GITHUB_SHA`.
-
-The create branch stamps the same body — CHANGELOG section +
-integrity block + verify recipe + tarball asset upload.
-
-### `auto-release.yml` grows release-time inputs
-
-Previously the consumer's own `release.yml` carried `node-version`,
-`vector-test-command`, `audit-level`, etc. In the chained flow the
-consumer no longer writes `release.yml` — they only write
-`auto-release.yml`. So `auto-release.yml` plumbs those inputs
-through to its chained `release.yml` call.
-
-Inputs added: `node-version`, `test-command`, `vector-test-command`,
-`audit-level`, `strict-action-pins`, `reproducibility-mode`,
-`debug`. All default to the same values as `release.yml` itself.
-
-Inputs deliberately omitted: `version-strategy` (auto-release *is*
-the strategy; `verify` makes no sense inside auto), `registry-url`
-(left on defaults for the MVP).
+- `auto-release.yml` replaces its `publish` workflow_call job with
+  a `dispatch-release` job that shells `gh workflow run`.
+- `auto-release.yml` drops the release-time input plumbing
+  (`node-version`, `vector-test-command`, `audit-level`,
+  `strict-action-pins`, `reproducibility-mode`, `debug`,
+  `test-command`). Those live on the consumer's `release.yml`
+  again — one source of truth for release config.
+- `auto-release.yml` gains a `release-workflow` input (default
+  `release.yml`) for consumers with a differently-named workflow.
+- `auto-release.yml` caller needs `permissions: actions: write` to
+  dispatch workflows.
+- Consumer `release.yml` needs a `workflow_dispatch` trigger with
+  a `tag` input. Pre-existing consumers who trigger only on
+  `release: published` continue to work for manual releases but
+  won't receive auto-dispatches until they add the trigger.
 
 ## Release ownership
 
-The old design split Release ownership awkwardly: `auto-release.yml`
-created the Release (for the trigger), `release.yml` edited the body
-(for the CHANGELOG and integrity data). Two workflows touching one
-object, coupled by event.
-
-The new design gives the Release entirely to `release.yml`:
-`update-release.sh` creates it after a successful publish or edits
-it in-place for the legacy flow. One workflow owns the object.
-
-This also means a failed publish no longer leaves a confusing
-empty Release behind — in the chained flow, if gates fail, no
-Release is created. The tag is pushed, which is a loud signal that
-a publish was attempted; a maintainer can re-run the failed
-`publish` job and the second attempt creates the Release
-idempotently.
+`release.yml` still owns the GitHub Release object via
+`update-release.sh` create-or-update (from v0.6). Auto-release
+no longer touches the Release at all — it only pushes a tag and
+kicks off the dispatch. When `release.yml` publishes
+successfully, `update-release.sh` creates the Release with the
+CHANGELOG body and integrity block. If `release.yml` fails,
+no Release is created; a maintainer can re-run it manually, and
+the second attempt creates the Release idempotently.
 
 ## OIDC and trusted publishing
 
-No change. The reusable-workflow OIDC subject contains the **entry-point caller's** `workflow_ref` — the consumer's
-`auto-release.yml`, not `forgesworn/anvil`'s internal `release.yml`.
-npm's trusted-publisher row continues to point at the consumer's
-caller file. Migration: if a consumer had trusted-publishing set up
-against `release.yml`, they need to point it at `auto-release.yml`
-when they move to the single-file pattern.
+Unchanged from pre-chain behaviour. The OIDC subject is
+`release.yml`. `npm`'s trusted-publisher row continues to point at
+the consumer's `release.yml`. No migration required.
 
-This is the biggest operational footgun in the migration. Call it
-out loudly in the migration docs.
+This is the entire point of the workflow_dispatch design.
 
 ## Backwards compatibility
 
-- **Consumers on `release.yml` with a `release: published` trigger:**
-  nothing changes. `inputs.tag` defaults to `''`; the fallback chain
-  lands on `github.event.release.tag_name` exactly as before.
-- **Consumers on `auto-release.yml` with `GH_TOKEN`:** the chained
-  flow ignores `GH_TOKEN`. The secret declaration is kept but
-  marked deprecated. A PAT in a consumer repo is no longer load-
-  bearing and can be rotated out. No code change is required on
-  their side beyond bumping the pin.
-- **Consumers on `auto-release.yml` without `GH_TOKEN`:** publish
-  never worked for them. Now it does. Strict improvement.
+- **Consumers on v0.5 auto-release + PAT**: the `GH_TOKEN` secret
+  is still accepted and silently ignored. PAT can be rotated out.
+- **Consumers on v0.6 manual release**: no change.
+- **Consumers on v0.7 chained auto-release**: the workflow_call
+  chain is removed in v0.8. They must add the `workflow_dispatch`
+  trigger + `tag` input to their `release.yml`. Trusted publisher
+  can stay pointed at `release.yml` (they never needed to move it
+  if they skipped v0.7).
+- **New consumers**: two-file setup, no trusted-publisher quirks.
 
 ## Risk edges
 
-- **Tag already exists.** `commit-and-tag`'s `git tag` fails loudly
-  on a re-run if someone manually tagged in between. Acceptable —
-  the maintainer is always the source of truth on tag collisions.
-- **Publish mid-fails after push.** Tag is on the remote, no
-  Release exists, no npm publish. Maintainer re-runs the failed
-  job. `publish-npm` is already idempotent; `update-release.sh`
-  creates the missing Release on the second attempt. Better than
-  today's failure mode.
-- **Consumer has both a stale `release.yml` file and the new
-  `auto-release.yml` in the same repo.** The stale `release.yml`
-  triggered on `release: published` now never fires, because
-  `auto-release.yml` no longer creates the Release up-front —
-  the chained `release.yml` does, and that create event is
-  `GITHUB_TOKEN`-authored so it is suppressed. One workflow run
-  publishes, not two. Consumers should delete the stale file on
-  migration but leaving it costs nothing.
+- **Tag already exists.** `commit-and-tag`'s `git tag` fails loudly.
+  Acceptable — maintainer collision on tagging.
+- **Dispatch fires, release.yml fails gates.** Tag is on the remote,
+  no GitHub Release, no npm publish. Maintainer re-runs the failed
+  `release.yml` run via the Actions UI. `publish-npm` is
+  idempotent; `update-release.sh` creates the Release on retry.
+- **Consumer's `release.yml` doesn't have workflow_dispatch yet.**
+  `gh workflow run` fails with a 422. Auto-release's
+  dispatch-release job fails. Tag is already pushed, so the bump
+  is real; the maintainer can create a GitHub Release manually
+  via the web UI to fire `release.yml` via `release: published`.
+  A graceful degradation rather than silent failure.
+- **Two workflow runs for one release.** Visible in the Actions
+  tab. Clearer than a single mega-run because failure boundaries
+  are obvious: bump-and-tag is separate from gates-and-publish.
 
 ## Known limitations
 
-- The chained `release.yml` run inherits the outer run's six-hour
-  timeout and total-jobs budget. For normal releases this is
-  inconsequential (<10 minutes).
-- Re-running the outer `auto-release.yml` re-runs the chained
-  `release.yml`. Every step must be idempotent. They already are
-  (publish-npm integrity check, update-release.sh view-or-edit-or-create).
-- The self-reference `@v0` in `auto-release.yml`'s `uses:` is a
-  literal — a consumer who wants to pilot a branch of anvil has to
-  edit their local fork. This is a GitHub Actions constraint, not
-  a design choice.
+- Dispatch is fire-and-forget. `auto-release.yml` completes once
+  `gh workflow run` returns (usually within seconds); it does not
+  wait for `release.yml` to finish. Monitor `release.yml` in the
+  Actions UI. This is deliberate — coupling the two into one run
+  is how we got the v0.7 design, and we don't want to go back.
+- `gh workflow run` requires `actions: write` permission on the
+  caller workflow. Documented in the consumer template above.
+- The dispatched `release.yml` runs at the newly-pushed tag ref
+  (via `--ref "$TAG"`). If the consumer's `release.yml` does
+  anything tag-relative (e.g. checks out `github.ref` without
+  falling back to the tag input), it may need adjustment. The
+  standard anvil caller pattern already handles this.
 
 ## What was considered and rejected
 
-- **Keep the PAT.** Contradicts the zero-secret design posture.
-- **GitHub App for token issuance.** Heavier setup than the tool it
-  replaces; breaks the "under thirty minutes to audit the whole
-  thing" constraint for consumers.
-- **`workflow_dispatch` triggered from `auto-release`.** Same
-  anti-recursion rule applies: `gh workflow run` from the default
-  `GITHUB_TOKEN` is suppressed.
-- **Move everything into one workflow file.** Tempting for
-  simplicity, but `release.yml` still needs to be callable
-  standalone for the manual flow. Separation of concerns wins.
+- **Keep the PAT (v0.5).** Zero-secret design violated.
+- **workflow_call chain (v0.7).** OIDC subject migration burden
+  per consumer. Rejected in favour of preserving the existing
+  trusted-publisher configuration.
+- **Move everything into one workflow file.** `release.yml` must
+  remain callable standalone for the manual flow. Separation of
+  concerns is load-bearing.
 
 ## References
 
-- GitHub Actions docs: events from `GITHUB_TOKEN` do not trigger
+- GitHub Actions: events from `GITHUB_TOKEN` do not trigger
   workflows, <https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication>
-- GitHub Actions reusable workflows: `workflow_call` is not an
-  event trigger, <https://docs.github.com/en/actions/sharing-automations/reusing-workflows>
-- npm trusted publishing: the `workflow_ref` claim points at the
+  (note the workflow_dispatch / repository_dispatch exceptions)
+- `gh workflow run` reference,
+  <https://cli.github.com/manual/gh_workflow_run>
+- npm trusted publishing: `workflow_ref` claim points at the
   entry-point caller, <https://docs.npmjs.com/trusted-publishers>

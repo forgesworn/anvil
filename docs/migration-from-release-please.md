@@ -35,13 +35,10 @@ jobs:
     # ... followed by a conditional npm publish step
 ```
 
-Replace it with a single workflow. `auto-release.yml` parses your
-conventional commits, bumps, tags, pushes, and publishes — all in
-one CI run by chaining into `release.yml` internally via
-`workflow_call`:
+Replace it with two workflows.
 
-**`.github/workflows/auto-release.yml`** (replaces release-please's
-version determination, tagging, **and** publish):
+**`.github/workflows/auto-release.yml`** — parses conventional
+commits, bumps, tags, and dispatches release.yml:
 
 ```yaml
 name: auto-release
@@ -50,10 +47,35 @@ on:
     branches: [main]
 permissions:
   contents: write
-  id-token: write
+  actions: write
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+```
+
+**`.github/workflows/release.yml`** — runs gates and publishes.
+Needs both `release: published` (for manual releases) and
+`workflow_dispatch` (for auto-release to dispatch):
+
+```yaml
+name: release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish
+        type: string
+        required: true
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
 ```
 
 ### 2. Remove release-please configuration

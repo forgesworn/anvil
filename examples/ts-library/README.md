@@ -3,22 +3,25 @@
 A worked example of how to set up `forgesworn/anvil` for a TypeScript
 library that publishes to npm.
 
-## Caller workflow
+## Caller workflows
 
-Two patterns — pick one based on whether you want manual or automatic
-releases. They are mutually exclusive; use one file or the other, not
-both.
+You always need **`release.yml`** — it runs the gates and publishes.
+Add **`auto-release.yml`** alongside if you want conventional-commit
+driven releases from `main`.
 
-### Manual (maintainer creates Release)
-
-`.github/workflows/release.yml`:
+### `release.yml` (required for both manual and auto modes)
 
 ```yaml
 name: release
-
 on:
   release:
-    types: [published]
+    types: [published]       # manual flow
+  workflow_dispatch:         # auto flow dispatches here
+    inputs:
+      tag:
+        description: Release tag to publish
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -28,44 +31,35 @@ jobs:
   release:
     uses: forgesworn/anvil/.github/workflows/release.yml@v0
     with:
+      tag: ${{ inputs.tag || '' }}
       vector-test-command: npm run test:vectors
 ```
 
-You bump `package.json`, update CHANGELOG, tag, push, and create a
-GitHub Release; the action takes over from there. See "The release
-loop" below for the full sequence.
+Drop `vector-test-command` if your library has no frozen test vectors.
 
-### Auto (conventional commits on main trigger release)
-
-`.github/workflows/auto-release.yml`:
+### `auto-release.yml` (optional — enables the auto mode)
 
 ```yaml
 name: auto-release
-
 on:
   push:
     branches: [main]
 
 permissions:
   contents: write
-  id-token: write
+  actions: write            # required to dispatch release.yml
 
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
-    with:
-      vector-test-command: npm run test:vectors
 ```
 
-You push conventional commits (`feat:`, `fix:`, `feat!:` for majors)
-to main. The workflow parses, bumps, tags, pushes, and publishes —
-all in one CI run. No separate `release.yml` needed; `auto-release.yml`
-chains into `release.yml` internally via `workflow_call`, no PAT
-required. See [`../../docs/design/chained-workflows.md`](../../docs/design/chained-workflows.md)
-for the architecture.
+No release-time inputs here — those live on `release.yml` because
+`auto-release.yml` fires `release.yml` via `workflow_dispatch`, which
+makes `release.yml` the OIDC entry-point for npm trusted publishing.
 
-Drop `vector-test-command` in either snippet if your library has no
-frozen test vectors.
+See [`../../docs/design/chained-workflows.md`](../../docs/design/chained-workflows.md)
+for why this is a two-file setup rather than one.
 
 ## `package.json` essentials
 
@@ -116,9 +110,10 @@ One-off setup on `npmjs.com`:
 1. Go to your package's Settings -> Trusted Publisher.
 2. Add a GitHub Actions publisher with:
    - **Repository**: your package's repo (not `forgesworn/anvil`)
-   - **Workflow filename**: your caller workflow — `release.yml` for
-     the manual pattern, `auto-release.yml` for the auto pattern.
-     **Not** the reusable workflow inside `forgesworn/anvil`.
+   - **Workflow filename**: `release.yml` — the same file for both
+     manual and auto flows, because `auto-release.yml` dispatches
+     `release.yml` as the OIDC entry-point. **Not** the reusable
+     workflow inside `forgesworn/anvil`.
    - **Environment**: leave empty
 
 npm matches against the OIDC token's `workflow_ref` claim (the caller),

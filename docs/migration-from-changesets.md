@@ -41,12 +41,31 @@ jobs:
 ```
 
 If you want automatic versioning from conventional commits (closest to
-the changesets experience), use `.github/workflows/auto-release.yml`
-**instead** of the manual `release.yml` above — `auto-release.yml`
-chains into `release.yml` internally via `workflow_call`, so you only
-need one file:
+the changesets experience), add `.github/workflows/auto-release.yml`
+alongside the `release.yml` above. You'll also need to add a
+`workflow_dispatch` trigger with a `tag` input to `release.yml`:
 
 ```yaml
+# Add to .github/workflows/release.yml triggers:
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish
+        type: string
+        required: true
+# And pass tag through in the job:
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    with:
+      tag: ${{ inputs.tag || '' }}
+```
+
+```yaml
+# .github/workflows/auto-release.yml
 name: auto-release
 
 on:
@@ -55,7 +74,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write
+  actions: write
 
 jobs:
   auto-release:

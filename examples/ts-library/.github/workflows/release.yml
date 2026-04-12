@@ -1,20 +1,30 @@
-# Minimal caller workflow for forgesworn/anvil.
+# Release pipeline for forgesworn/anvil.
 # Place this in YOUR library at .github/workflows/release.yml.
 #
-# Prerequisites:
-#   1. Configure npm trusted publishing on npmjs.com for THIS repo
-#      (not forgesworn/anvil) pointing at THIS workflow file.
-#   2. Bump package.json, commit, tag (e.g. v1.2.3), push, then
-#      create a GitHub Release for that tag.
+# Two triggers:
+#   release: published   - manual flow, you create the GitHub Release
+#   workflow_dispatch    - auto flow, auto-release.yml dispatches here
+#
+# Configure npm trusted publishing for THIS workflow file (not
+# forgesworn/anvil) — the OIDC workflow_ref claim is the entry-point.
+# Both triggers land on this same workflow, so one trusted-publisher
+# row covers both flows.
 #
 # The reusable workflow handles: tests, vector gate, npm audit,
 # exports check, secret scan, action-pin audit, reproducible build
-# (two-runner), and OIDC-authenticated npm publish.
+# (two-runner), OIDC-authenticated npm publish, and GitHub Release
+# body update / create.
 
 name: release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (e.g. v1.2.3)
+        type: string
+        required: true
 
 permissions:
   contents: write
@@ -24,4 +34,5 @@ jobs:
   release:
     uses: forgesworn/anvil/.github/workflows/release.yml@v0
     with:
+      tag: ${{ inputs.tag || '' }}
       vector-test-command: npm run test:vectors

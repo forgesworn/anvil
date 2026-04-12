@@ -187,10 +187,13 @@ context at all or has it but cannot match the trusted publisher.
   dependencies.
 
 That is genuinely it. If you liked the automatic versioning from
-commit messages, use the companion `auto-release.yml` workflow
-(single-file, no separate `release.yml` needed — it chains into
-`release.yml` internally via `workflow_call`). Same behaviour as
-`semantic-release`, zero dependencies, no PAT.
+commit messages, add the companion `auto-release.yml` workflow
+alongside the `release.yml` you already wrote — auto-release
+parses commits, bumps, tags, and dispatches `release.yml` via
+`workflow_dispatch` (no PAT needed). You'll need to add a
+`workflow_dispatch` trigger with a `tag` input to `release.yml`;
+see the README's "Version strategy → Auto" section for the exact
+two-file shape.
 
 If you want manual control with a safety net, use
 `version-strategy: verify` -- the action parses your conventional

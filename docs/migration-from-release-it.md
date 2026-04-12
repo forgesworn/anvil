@@ -41,11 +41,12 @@ jobs:
 ```
 
 If you used release-it's conventional changelog plugin and want to keep
-automatic versioning, use `.github/workflows/auto-release.yml` **instead**
-of the manual `release.yml` above — it chains into `release.yml`
-internally via `workflow_call`, so you only need one file:
+automatic versioning, add `.github/workflows/auto-release.yml`
+alongside the `release.yml` above, and add a `workflow_dispatch`
+trigger + `tag` input to `release.yml` so auto-release can fire it:
 
 ```yaml
+# .github/workflows/auto-release.yml
 name: auto-release
 
 on:
@@ -54,12 +55,15 @@ on:
 
 permissions:
   contents: write
-  id-token: write
+  actions: write
 
 jobs:
   auto-release:
     uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
 ```
+
+See the README's "Version strategy → Auto" section for the
+workflow_dispatch additions to `release.yml`.
 
 ### 2. Remove the release-it workflow
 
