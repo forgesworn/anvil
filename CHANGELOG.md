@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.3 (2026-04-12)
+
+### Docs
+
+- tighten action.yml description for Marketplace card display
+- add sponsor badge and funding section
+- add composite-action signpost in Quick start for Marketplace visitors
+
 ## 0.8.2 (2026-04-12)
 
 ### Bug Fixes

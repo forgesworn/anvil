@@ -74,6 +74,14 @@ Pure bash, zero dependencies, community infrastructure.
 
 ## Quick start (reusable workflow)
 
+Two surfaces to choose from:
+
+- **Reusable workflow** (recommended, below). Full four-job DAG with
+  the multi-runner reproducible-build gate baked in.
+- **Composite action**: `uses: forgesworn/anvil@v0` inside an existing
+  job. No reproducible-build gate (composite actions cannot span jobs).
+  See [Advanced: composite action directly](#advanced-composite-action-directly).
+
 Create `.github/workflows/release.yml` in your library:
 
 ```yaml
