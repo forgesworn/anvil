@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 (2026-04-12)
+
+### Bug Fixes
+
+- remove invalid runner.temp from publish job-level env
+
+
+
 ## 0.8.0 (2026-04-12)
 
 ### Features
