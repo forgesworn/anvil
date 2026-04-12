@@ -45,9 +45,9 @@ if [[ -z "${JSR_TOKEN:-}" ]]; then
   die "JSR_TOKEN not set — cannot publish to JSR (set it as a repo secret)"
 fi
 
-slow_types=""
+jsr_args=()
 if [[ "$(jq -r '.allowSlowTypes // false' jsr.json)" == "true" ]]; then
-  slow_types="--allow-slow-types"
+  jsr_args+=(--allow-slow-types)
   log "allowSlowTypes=true"
 fi
 
@@ -63,7 +63,7 @@ log "publishing to JSR"
 # exists to prevent. The pinned version should be bumped deliberately
 # after review, not left floating.
 JSR_VERSION="${JSR_CLI_VERSION:-0.16.2}"
-if ! npx --yes "jsr@${JSR_VERSION}" publish --token "$JSR_TOKEN" $slow_types; then
+if ! npx --yes "jsr@${JSR_VERSION}" publish --token "$JSR_TOKEN" "${jsr_args[@]}"; then
   die "jsr publish failed"
 fi
 

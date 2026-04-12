@@ -82,13 +82,30 @@ for file in "${files[@]}"; do
       # Self-exemption — see header comment. Matches both the
       # composite-action form (`forgesworn/release-action`) and the
       # reusable-workflow form (`forgesworn/release-action/.github/...`).
+      # Still warn if the ref is not a SHA — callers using @v0 are
+      # exposed to tag retargeting on the highest-privilege dependency
+      # in the release job.
       if [[ "$action" == "forgesworn/release-action" || "$action" == forgesworn/release-action/* ]]; then
+        if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+          warn "forgesworn/release-action is not SHA-pinned ($ref) — consider pinning to a commit SHA"
+        fi
         continue
       fi
 
-      # Local actions and docker:// references have no meaningful
-      # 40-char-hex pin form; skip rather than false-positive.
-      if [[ "$action" == ./* || "$action" == docker://* ]]; then
+      # Local actions (./) are always resolved from the same repo checkout.
+      if [[ "$action" == ./* ]]; then
+        continue
+      fi
+
+      # Docker references use image digests for pinning, not commit SHAs.
+      # Flag docker:// refs whose @ref is not a sha256 digest.
+      # Note: docker://image:tag references (no @) are not caught by the
+      # grep filter and are a known gap — they never reach this code path.
+      if [[ "$action" == docker://* ]]; then
+        if [[ "$ref" != sha256:* ]]; then
+          warn "unpinned container action: $file:$lineno  $action@$ref (no digest)"
+          unpinned_count=$((unpinned_count + 1))
+        fi
         continue
       fi
 

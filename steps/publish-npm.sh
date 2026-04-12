@@ -63,6 +63,7 @@ done < "$meta_file"
 
 [[ -n "$filename"            ]] || die "meta file missing filename"
 [[ -n "$recorded_integrity"  ]] || die "meta file missing integrity"
+[[ "$filename" != *..* && "$filename" != /* ]] || die "suspicious filename in meta file: $filename"
 
 # Reconstruct the tarball path from $TARBALL_META_DIR + filename rather
 # than trusting the `path=` field. The meta file may have been written

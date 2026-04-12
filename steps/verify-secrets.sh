@@ -129,7 +129,7 @@ for f in "${pack_files[@]}"; do
       break
     fi
   done
-  $skip || content_files+=("$f")
+  [[ "$skip" == true ]] || content_files+=("$f")
 done
 
 for pattern in "${forbidden_patterns[@]}"; do

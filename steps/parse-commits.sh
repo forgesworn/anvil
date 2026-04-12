@@ -180,10 +180,12 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
     echo "bump=$bump"
     echo "next_version=$next_version"
-    # Multiline output uses heredoc delimiter
-    echo "changelog<<CHANGELOG_EOF"
+    # Multiline output uses a randomised heredoc delimiter to prevent
+    # injection via crafted commit messages containing the delimiter string.
+    _delim="CHANGELOG_EOF_$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    echo "changelog<<${_delim}"
     echo "$changelog"
-    echo "CHANGELOG_EOF"
+    echo "${_delim}"
   } >> "$GITHUB_OUTPUT"
 fi
 

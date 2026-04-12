@@ -69,7 +69,9 @@ if [[ -f "$meta_file" ]]; then
     esac
   done < "$meta_file"
 
-  if [[ -n "$filename" && -n "$sha256" && -n "$integrity" ]]; then
+  if [[ -n "$filename" && ("$filename" == *..* || "$filename" == /*) ]]; then
+    warn "suspicious filename in meta file: $filename — skipping integrity block"
+  elif [[ -n "$filename" && -n "$sha256" && -n "$integrity" ]]; then
     pkg="${PACKAGE_JSON:-package.json}"
     name=""
     if [[ -f "$pkg" ]]; then
