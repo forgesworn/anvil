@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 (2026-04-12)
+
+### Bug Fixes
+
+- include repo root in context7 indexed folders
+
+
+
 ## 0.5.0 (2026-04-12)
 
 ### Features
