@@ -4,12 +4,57 @@
 
 ### Features
 
-- conventional commit versioning, security fixes, wider ecosystem positioning
+- conventional commit versioning (`version-strategy: verify`)
+- `auto-release.yml` companion workflow for push-to-main automation
+- wider ecosystem positioning (migration guides, comparison doc)
 
 ### Bug Fixes
 
 - add .env, key material, and IDE patterns to .gitignore
 - harden CI/CD workflows against expression injection and credential leaks
 - harden scripts against injection, path traversal, and fragile patterns
+
+## 0.4.1 (2026-04-11)
+
+### Bug Fixes
+
+- fix scoped-package registry URL in artefact integrity verify recipe
+  (`@scope/pkg` tarballs got a 404; hashes were always correct)
+- add 4 regression tests for scoped/unscoped URL construction
+
+## 0.4.0 (2026-04-11)
+
+### Features
+
+- **multi-runner reproducible-build attestation** (flagship): two parallel
+  CI builds on independent runners must produce byte-identical tarballs
+  or the release is blocked
+- four-job DAG: build-a, build-b, reproduce, publish
+- `normalise-mtimes.sh`: touch all files to SOURCE_DATE_EPOCH for
+  deterministic tar headers
+- `compare-tarball-meta.sh`: reproducibility gate (strict/warn/off)
+- canonical tarball uploaded as GitHub Release asset
+- `reproducibility-mode` input (default: strict)
+
+### Stats
+
+- 2 new step scripts, 16 new bats tests (59 total)
+- ~1250 lines of bash (inside 30-minute audit budget)
+
+## 0.3.0 (2026-04-11)
+
+### Features
+
+- **artefact integrity bundle**: sha256 + sha512 integrity block appended
+  to every GitHub Release body with a one-line verify recipe
+- `record-tarball.sh`: pack once, hash, write tarball.meta for the pipeline
+- `publish-npm.sh`: upload the exact recorded tarball (no re-pack)
+- `verify-action-pins.sh`: warn/fail on unpinned `uses:` refs in consumer
+  workflows (warn-only by default, `strict-action-pins: true` to fail)
+
+### Stats
+
+- 2 new step scripts, 13 new bats tests (43 total)
+- ~1000 lines of bash
 
 

@@ -84,7 +84,7 @@ All in `steps/`, all bash, all sourcing `lib.sh` for shared helpers:
 
 | Input | Default | Purpose |
 |---|---|---|
-| node-version | 24.11.0 | Node version (must ship npm >= 11.5.x for OIDC) |
+| node-version | 24.11.0 | Node version (must ship npm >= 11.5.x for OIDC; 22 LTS ships 10.9.x which is too old) |
 | registry-url | https://registry.npmjs.org | npm registry URL |
 | test-command | npm test | Full test suite command |
 | vector-test-command | (empty) | Frozen-vector gate command (skip if empty) |
@@ -100,6 +100,34 @@ All in `steps/`, all bash, all sourcing `lib.sh` for shared helpers:
 The composite action (`uses: forgesworn/anvil@v0`) accepts the
 same inputs but does not include the reproducible-build gate (build-b
 and reproduce jobs). Use the reusable workflow for full protection.
+
+Composite action callers must add `actions/checkout` before the step
+(the reusable workflow handles checkout internally):
+
+```yaml
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: forgesworn/anvil@v0
+        with:
+          vector-test-command: npm run test:vectors
+```
+
+For JSR dual-publish via the reusable workflow, pass the JSR token as
+a secret:
+
+```yaml
+jobs:
+  release:
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    secrets:
+      JSR_TOKEN: ${{ secrets.JSR_TOKEN }}
+```
 
 ## Links
 
