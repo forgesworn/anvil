@@ -1,5 +1,7 @@
 # forgesworn/release-action
 
+[![CI](https://github.com/forgesworn/release-action/actions/workflows/ci.yml/badge.svg)](https://github.com/forgesworn/release-action/actions/workflows/ci.yml)
+
 In 2026, most Nostr and Bitcoin JavaScript libraries still publish
 with long-lived `NPM_TOKEN` secrets off a maintainer's workstation.
 The few that use OIDC use it with no release-time gates beyond
@@ -80,8 +82,8 @@ on:
   release:
     types: [published]
 permissions:
-  contents: write
-  id-token: write
+  contents: write   # update Release bodies + upload tarball asset
+  id-token: write   # OIDC trusted publishing to npm
 jobs:
   release:
     uses: forgesworn/release-action/.github/workflows/release.yml@v0

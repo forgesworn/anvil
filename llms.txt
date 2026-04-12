@@ -1,0 +1,99 @@
+# forgesworn/release-action
+
+> Cryptography-grade release tool for JS/TS libraries. Multi-runner
+> reproducible-build attestation, OIDC trusted publishing, SLSA
+> provenance, pre-publish secret scan, exports-map check, frozen-vector
+> gate, runtime-only npm audit, action-pin auditing. Pure bash, ~1250
+> lines, auditable in thirty minutes.
+
+## What this is
+
+A GitHub Action (reusable workflow + composite fallback) that publishes
+npm packages with hard pre-publish gates designed for cryptography
+libraries whose value proposition is byte-identical output.
+
+The v0.4 flagship: two parallel CI builds on independent runners must
+produce byte-identical tarballs, or the release is blocked. No other
+JS release tool offers this today.
+
+## Who it's for
+
+Maintainers of JavaScript/TypeScript cryptography, Nostr, and Bitcoin
+libraries who care about supply-chain integrity and want a release tool
+with a smaller attack surface than the libraries it ships.
+
+## How to use it
+
+Five-line caller workflow in your library's `.github/workflows/release.yml`:
+
+```yaml
+name: release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  release:
+    uses: forgesworn/release-action/.github/workflows/release.yml@v0
+    with:
+      vector-test-command: npm run test:vectors
+```
+
+Configure npm trusted publishing on npmjs.com for YOUR repo and YOUR
+caller workflow file (not forgesworn/release-action). Bump package.json,
+tag, push, create a GitHub Release. The workflow handles everything
+else.
+
+## Architecture
+
+The reusable workflow runs as a four-job DAG:
+
+- **build-a**: all gates (tag match, tests, vectors, audit, exports,
+  secrets, action pins) then npm pack with normalised mtimes
+- **build-b**: parallel build + pack on a second runner
+- **reproduce**: compare sha256s; strict mode blocks on mismatch
+- **publish**: upload the canonical tarball to npm, update the GitHub
+  Release body with an artefact-integrity block, upload the tarball as
+  a release asset
+
+## Step scripts
+
+All in `steps/`, all bash, all sourcing `lib.sh` for shared helpers:
+
+| Script | Purpose |
+|---|---|
+| verify-tag.sh | Git tag matches package.json version |
+| run-tests.sh | Full test suite |
+| verify-vectors.sh | Frozen-vector gate |
+| verify-audit.sh | npm audit --omit=dev |
+| verify-exports.sh | Every exports subpath exists on disk |
+| verify-secrets.sh | Secret scan over pack set |
+| verify-action-pins.sh | Warn/fail on unpinned uses: in workflows |
+| normalise-mtimes.sh | Touch all files to SOURCE_DATE_EPOCH |
+| record-tarball.sh | npm pack, hash, write tarball.meta |
+| compare-tarball-meta.sh | Reproducibility gate (compare two metas) |
+| publish-npm.sh | Publish the exact recorded tarball via OIDC |
+| publish-jsr.sh | JSR publish if jsr.json exists |
+| update-release.sh | CHANGELOG extraction, integrity block, asset upload |
+| changelog-extract.sh | Parse CHANGELOG.md for the version section |
+| lib.sh | Shared helpers (header, log, warn, die, require_cmds) |
+
+## Key inputs
+
+| Input | Default | Purpose |
+|---|---|---|
+| vector-test-command | (empty) | Consumer-supplied frozen-vector command |
+| reproducibility-mode | strict | strict / warn / off |
+| strict-action-pins | false | Promote action-pin warnings to failures |
+| dry-run | false | Skip real publish |
+| debug | false | Diagnostic logging for OIDC issues |
+
+## Links
+
+- README: https://github.com/forgesworn/release-action/blob/main/README.md
+- Threat model: https://github.com/forgesworn/release-action/blob/main/THREAT-MODEL.md
+- Design doc (reproducible builds): https://github.com/forgesworn/release-action/blob/main/docs/design/reproducible-build.md
+- Migration from semantic-release: https://github.com/forgesworn/release-action/blob/main/docs/migration-from-semantic-release.md
+- Migration from v0.3: https://github.com/forgesworn/release-action/blob/main/docs/migration-from-v0.3.md
