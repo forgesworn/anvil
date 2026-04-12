@@ -1,0 +1,14 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "anvil",
+  "description": "Forge-hardened npm publishing for JS/TS libraries. Multi-runner reproducible-build attestation, OIDC trusted publishing, hard pre-publish gates. Pure bash, zero dependencies.",
+  "folders": ["docs", "examples", "steps"],
+  "excludeFolders": ["node_modules", "test"],
+  "excludeFiles": [],
+  "rules": [
+    "anvil is a GitHub Action, not an npm package. Consumers reference it via uses: forgesworn/anvil/.github/workflows/release.yml@v0",
+    "The composite action (uses: forgesworn/anvil@v0) omits the reproducible-build gate. Use the reusable workflow for full protection.",
+    "Node version must ship npm >= 11.5.x for OIDC trusted publishing. Node 22 LTS is too old.",
+    "Trusted publishing must be configured on npmjs.com pointing at the consumer's repo and workflow file, not at forgesworn/anvil."
+  ]
+}
