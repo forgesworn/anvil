@@ -1,13 +1,34 @@
 # Companion workflow: automatic version determination from conventional
-# commits. Runs on push to the release branch, determines if a release
-# is warranted, bumps package.json, generates CHANGELOG section, creates
-# a git tag and GitHub Release. The GitHub Release creation then triggers
-# the main release.yml pipeline (gates + publish).
+# commits. Runs on push to the release branch, parses commits since the
+# last tag, and if a release is warranted, bumps package.json, updates
+# CHANGELOG, tags, pushes, and publishes — all inside one CI run.
 #
 # This is the "auto" mode -- the zero-dependency replacement for
 # semantic-release. Use it if you want CI to decide the version number.
 # If you prefer manual control, skip this workflow entirely and use
 # release.yml directly.
+#
+# DAG:
+#
+#     determine (parse commits, decide bump)
+#         │
+#         ▼  (if should_release == 'true')
+#     commit-and-tag (bump package.json, commit, tag, push)
+#         │
+#         ▼
+#     publish (uses: release.yml via workflow_call)
+#         ├── build-a (gates)
+#         ├── build-b (reproduce)
+#         ├── reproduce (compare)
+#         └── publish (npm + GitHub Release create)
+#
+# The `publish` job delegates to release.yml via workflow_call, not an
+# event trigger. This matters: GitHub's anti-recursion rule suppresses
+# workflow runs from events created by the default GITHUB_TOKEN (tag
+# pushes, release creations), so event-based chaining would require a
+# PAT. workflow_call is not an event, so the rule does not apply — one
+# human push to main produces one workflow run, end-to-end, no PAT.
+# See docs/design/chained-workflows.md for the full rationale.
 #
 # Usage in your repo:
 #
@@ -17,12 +38,16 @@
 #       branches: [main]
 #   permissions:
 #     contents: write
+#     id-token: write
 #   jobs:
 #     auto-release:
 #       uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
+#       with:
+#         vector-test-command: npm run test:vectors  # optional
 #
 # That's it. Push conventional commits to main, releases happen
-# automatically when warranted.
+# automatically when warranted. You do not need a separate release.yml
+# in your repo — this workflow chains into release.yml internally.
 
 name: auto-release
 
@@ -42,17 +67,55 @@ on:
         type: string
         default: CHANGELOG.md
       dry-run:
-        description: Determine version and changelog but do not commit, tag, or create a release
+        description: Determine version and changelog but do not commit, tag, or publish
+        type: string
+        default: 'false'
+      # ---------------------------------------------------------------
+      # Inputs plumbed through to release.yml via the chained publish job.
+      # These match release.yml's inputs and preserve its defaults when
+      # omitted. Callers who used to set these on a separate release.yml
+      # caller now set them here.
+      # ---------------------------------------------------------------
+      node-version:
+        description: Node version used for npm operations (must ship with npm >= 11.5.x for OIDC)
+        type: string
+        default: '24.11.0'
+      test-command:
+        description: Command that runs the full test suite
+        type: string
+        default: 'npm test'
+      vector-test-command:
+        description: Command for the frozen-vector gate (empty to skip)
+        type: string
+        default: ''
+      audit-level:
+        description: npm audit level
+        type: string
+        default: 'low'
+      strict-action-pins:
+        description: If 'true', fail the release on any unpinned action reference in .github/workflows
+        type: string
+        default: 'true'
+      reproducibility-mode:
+        description: One of strict, warn, off (see release.yml)
+        type: string
+        default: 'strict'
+      debug:
+        description: If 'true', dump npm/OIDC diagnostics before publish
         type: string
         default: 'false'
     secrets:
       GH_TOKEN:
         description: |
-          Optional GitHub App token or PAT with contents: write scope.
-          If provided, the push and GitHub Release creation will use this
-          token instead of the default GITHUB_TOKEN. Required if you want
-          the created Release to trigger release.yml automatically --
-          the default GITHUB_TOKEN cannot trigger further workflow runs.
+          Deprecated. Previously required as a PAT or GitHub App token to
+          bridge the auto-release → release.yml event gap. The chained
+          workflow now calls release.yml via workflow_call, so no PAT is
+          needed. The secret declaration is kept for backwards
+          compatibility — if set, it is silently ignored in the chained
+          publish path. Safe to remove from caller workflows.
+        required: false
+      JSR_TOKEN:
+        description: JSR publishing token (required only if jsr.json exists)
         required: false
 
 jobs:
@@ -102,21 +165,23 @@ jobs:
             echo "Release warranted: ${BUMP} bump -> ${NEXT_VERSION}"
           fi
 
-  release:
+  commit-and-tag:
     needs: determine
-    if: needs.determine.outputs.should_release == 'true'
+    if: needs.determine.outputs.should_release == 'true' && inputs.dry-run != 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout consumer repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-          # Default GITHUB_TOKEN can push but cannot trigger further
-          # workflow runs. If the consumer wants the push to trigger
-          # release.yml, they pass a PAT or GitHub App token via the
-          # GH_TOKEN secret. See README "Auto" version strategy section.
+          # The default GITHUB_TOKEN is sufficient now — we no longer
+          # need an event trigger to fire downstream, so the
+          # anti-recursion rule is irrelevant. GH_TOKEN is accepted as
+          # a deprecated override but not required.
           token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Configure git
@@ -186,7 +251,7 @@ jobs:
           echo "Updated $changelog_file with $NEXT_VERSION section"
 
       - name: Commit, tag, and push
-        if: inputs.dry-run != 'true'
+        id: tag
         env:
           NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
           PACKAGE_JSON: ${{ inputs.package-json }}
@@ -205,21 +270,42 @@ jobs:
           git commit -m "chore(release): ${NEXT_VERSION}"
           git tag "v${NEXT_VERSION}"
           git push origin HEAD --follow-tags
+          echo "tag=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release
-        if: inputs.dry-run != 'true'
-        env:
-          NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
-          CHANGELOG: ${{ needs.determine.outputs.changelog }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${NEXT_VERSION}" \
-            --title "v${NEXT_VERSION}" \
-            --notes "$CHANGELOG" \
-            --target "$(git rev-parse HEAD)"
+  publish:
+    # Chain directly into release.yml via workflow_call. This is the
+    # critical architectural hook: no event trigger, no PAT, one run.
+    # The self-reference `@v0` pins release.yml to the same major as
+    # auto-release.yml's caller pin. Consumers who bump their pin
+    # upgrade both workflows together.
+    needs: [determine, commit-and-tag]
+    if: needs.determine.outputs.should_release == 'true' && inputs.dry-run != 'true'
+    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      tag: ${{ needs.commit-and-tag.outputs.tag }}
+      package-json: ${{ inputs.package-json }}
+      changelog-file: ${{ inputs.changelog-file }}
+      node-version: ${{ inputs.node-version }}
+      test-command: ${{ inputs.test-command }}
+      vector-test-command: ${{ inputs.vector-test-command }}
+      audit-level: ${{ inputs.audit-level }}
+      strict-action-pins: ${{ inputs.strict-action-pins }}
+      reproducibility-mode: ${{ inputs.reproducibility-mode }}
+      debug: ${{ inputs.debug }}
+      dry-run: ${{ inputs.dry-run }}
+    secrets: inherit
 
+  dry-run-summary:
+    needs: determine
+    if: needs.determine.outputs.should_release == 'true' && inputs.dry-run == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
       - name: Dry-run summary
-        if: inputs.dry-run == 'true'
         env:
           NEXT_VERSION: ${{ needs.determine.outputs.next_version }}
           CHANGELOG: ${{ needs.determine.outputs.changelog }}
