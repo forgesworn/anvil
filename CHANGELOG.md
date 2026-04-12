@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 (2026-04-12)
+
+### Bug Fixes
+
+- strip lifecycle-script stdout before parsing npm pack --json
+
+
+
 ## 0.8.1 (2026-04-12)
 
 ### Bug Fixes
