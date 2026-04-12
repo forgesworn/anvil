@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 (2026-04-12)
+
+### Features
+
+- create or update Release to support chained auto-release flow
+
+
+
 ## 0.5.1 (2026-04-12)
 
 ### Bug Fixes
