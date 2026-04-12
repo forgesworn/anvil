@@ -1,7 +1,7 @@
 # Companion workflow: automatic version determination from conventional
 # commits. Runs on push to the release branch, parses commits since the
 # last tag, and if a release is warranted, bumps package.json, updates
-# CHANGELOG, tags, pushes, and publishes — all inside one CI run.
+# CHANGELOG, tags, and dispatches the consumer's release.yml to publish.
 #
 # This is the "auto" mode -- the zero-dependency replacement for
 # semantic-release. Use it if you want CI to decide the version number.
@@ -16,18 +16,24 @@
 #     commit-and-tag (bump package.json, commit, tag, push)
 #         │
 #         ▼
-#     publish (uses: release.yml via workflow_call)
-#         ├── build-a (gates)
-#         ├── build-b (reproduce)
-#         ├── reproduce (compare)
-#         └── publish (npm + GitHub Release create)
+#     dispatch-release (gh workflow run release.yml -f tag=vX.Y.Z)
+#         │
+#         ▼
+#     (consumer's release.yml fires in a separate workflow run,
+#      receives the tag via workflow_dispatch input, delegates to
+#      forgesworn/anvil/.github/workflows/release.yml@v0 which runs
+#      the gates + publishes to npm + creates the GitHub Release)
 #
-# The `publish` job delegates to release.yml via workflow_call, not an
-# event trigger. This matters: GitHub's anti-recursion rule suppresses
-# workflow runs from events created by the default GITHUB_TOKEN (tag
-# pushes, release creations), so event-based chaining would require a
-# PAT. workflow_call is not an event, so the rule does not apply — one
-# human push to main produces one workflow run, end-to-end, no PAT.
+# Why dispatch instead of workflow_call: the OIDC subject for npm
+# trusted publishing is the entry-point caller's workflow_ref. A
+# workflow_call chain would make auto-release.yml the OIDC subject,
+# forcing every consumer to reconfigure trusted publishing to point
+# at auto-release.yml. workflow_dispatch triggers the consumer's
+# release.yml as the entry point, preserving the existing trusted-
+# publisher configuration. GitHub's anti-recursion rule suppresses
+# events created by GITHUB_TOKEN, but workflow_dispatch and
+# repository_dispatch are documented exceptions -- they do trigger
+# workflow runs even when dispatched by the token. No PAT required.
 # See docs/design/chained-workflows.md for the full rationale.
 #
 # Usage in your repo:
@@ -38,16 +44,13 @@
 #       branches: [main]
 #   permissions:
 #     contents: write
-#     id-token: write
+#     actions: write
 #   jobs:
 #     auto-release:
 #       uses: forgesworn/anvil/.github/workflows/auto-release.yml@v0
-#       with:
-#         vector-test-command: npm run test:vectors  # optional
 #
-# That's it. Push conventional commits to main, releases happen
-# automatically when warranted. You do not need a separate release.yml
-# in your repo — this workflow chains into release.yml internally.
+# Your release.yml must also declare a workflow_dispatch trigger with
+# a `tag` input (see the example in examples/ts-library).
 
 name: auto-release
 
@@ -58,6 +61,13 @@ on:
         description: Branch that triggers releases
         type: string
         default: main
+      release-workflow:
+        description: >-
+          Filename of the consumer's release workflow to dispatch after
+          the tag push. Must be a workflow with a workflow_dispatch
+          trigger that accepts a `tag` input. Usually `release.yml`.
+        type: string
+        default: release.yml
       package-json:
         description: Path to package.json
         type: string
@@ -67,55 +77,18 @@ on:
         type: string
         default: CHANGELOG.md
       dry-run:
-        description: Determine version and changelog but do not commit, tag, or publish
-        type: string
-        default: 'false'
-      # ---------------------------------------------------------------
-      # Inputs plumbed through to release.yml via the chained publish job.
-      # These match release.yml's inputs and preserve its defaults when
-      # omitted. Callers who used to set these on a separate release.yml
-      # caller now set them here.
-      # ---------------------------------------------------------------
-      node-version:
-        description: Node version used for npm operations (must ship with npm >= 11.5.x for OIDC)
-        type: string
-        default: '24.11.0'
-      test-command:
-        description: Command that runs the full test suite
-        type: string
-        default: 'npm test'
-      vector-test-command:
-        description: Command for the frozen-vector gate (empty to skip)
-        type: string
-        default: ''
-      audit-level:
-        description: npm audit level
-        type: string
-        default: 'low'
-      strict-action-pins:
-        description: If 'true', fail the release on any unpinned action reference in .github/workflows
-        type: string
-        default: 'true'
-      reproducibility-mode:
-        description: One of strict, warn, off (see release.yml)
-        type: string
-        default: 'strict'
-      debug:
-        description: If 'true', dump npm/OIDC diagnostics before publish
+        description: Determine version and changelog but do not commit, tag, or dispatch
         type: string
         default: 'false'
     secrets:
       GH_TOKEN:
         description: |
-          Deprecated. Previously required as a PAT or GitHub App token to
-          bridge the auto-release → release.yml event gap. The chained
-          workflow now calls release.yml via workflow_call, so no PAT is
-          needed. The secret declaration is kept for backwards
-          compatibility — if set, it is silently ignored in the chained
-          publish path. Safe to remove from caller workflows.
-        required: false
-      JSR_TOKEN:
-        description: JSR publishing token (required only if jsr.json exists)
+          Deprecated. Previously bridged the auto-release -> release.yml
+          event gap via PAT before workflow_dispatch was adopted. The
+          default GITHUB_TOKEN is sufficient now -- workflow_dispatch
+          triggered by GITHUB_TOKEN is an explicit exception to the
+          anti-recursion rule. Secret declaration kept for backwards
+          compatibility; silently ignored when set.
         required: false
 
 jobs:
@@ -178,11 +151,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-          # The default GITHUB_TOKEN is sufficient now — we no longer
-          # need an event trigger to fire downstream, so the
-          # anti-recursion rule is irrelevant. GH_TOKEN is accepted as
-          # a deprecated override but not required.
-          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         run: |
@@ -272,31 +241,35 @@ jobs:
           git push origin HEAD --follow-tags
           echo "tag=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
 
-  publish:
-    # Chain directly into release.yml via workflow_call. This is the
-    # critical architectural hook: no event trigger, no PAT, one run.
-    # The self-reference `@v0` pins release.yml to the same major as
-    # auto-release.yml's caller pin. Consumers who bump their pin
-    # upgrade both workflows together.
+  dispatch-release:
+    # Fire the consumer's release.yml via workflow_dispatch. This is the
+    # critical hook that makes the auto flow work without a PAT:
+    # workflow_dispatch is an explicit exception to GitHub's GITHUB_TOKEN
+    # anti-recursion rule, so the default token is sufficient. The
+    # consumer's release.yml is the OIDC subject for npm trusted
+    # publishing, so the existing trusted-publisher configuration does
+    # not need to change.
     needs: [determine, commit-and-tag]
     if: needs.determine.outputs.should_release == 'true' && inputs.dry-run != 'true'
-    uses: forgesworn/anvil/.github/workflows/release.yml@v0
+    runs-on: ubuntu-24.04
     permissions:
-      contents: write
-      id-token: write
-    with:
-      tag: ${{ needs.commit-and-tag.outputs.tag }}
-      package-json: ${{ inputs.package-json }}
-      changelog-file: ${{ inputs.changelog-file }}
-      node-version: ${{ inputs.node-version }}
-      test-command: ${{ inputs.test-command }}
-      vector-test-command: ${{ inputs.vector-test-command }}
-      audit-level: ${{ inputs.audit-level }}
-      strict-action-pins: ${{ inputs.strict-action-pins }}
-      reproducibility-mode: ${{ inputs.reproducibility-mode }}
-      debug: ${{ inputs.debug }}
-      dry-run: ${{ inputs.dry-run }}
-    secrets: inherit
+      actions: write  # required to dispatch workflows
+      contents: read
+    steps:
+      - name: Dispatch release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_WORKFLOW: ${{ inputs.release-workflow }}
+          TAG: ${{ needs.commit-and-tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching $RELEASE_WORKFLOW with tag=$TAG on $REPO (ref=$TAG)"
+          gh workflow run "$RELEASE_WORKFLOW" \
+            --repo "$REPO" \
+            --ref "$TAG" \
+            -f tag="$TAG"
+          echo "Dispatch sent. The release workflow will publish shortly."
 
   dry-run-summary:
     needs: determine
