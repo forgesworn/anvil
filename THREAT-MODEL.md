@@ -168,6 +168,18 @@ The `verify-action-pins` gate has two known false negatives:
    action references through matrix expressions should audit those
    templates separately.
 
+### Secret-scan pack-set selection relies on npm output ordering
+
+`verify-secrets` and `record-tarball` both run `npm pack --json` and
+parse the last JSON value from its stdout. This correctly isolates
+npm's own manifest from any prepack/prepare lifecycle script that also
+prints JSON, because npm emits the manifest **after** prepack has run.
+If npm ever reordered so that prepack output came after the manifest
+(e.g. a future version that streams output differently), the last-value
+selection would pick prepack output instead and the scan could become
+bypassable. This is a stable contract today but worth re-checking on
+major npm upgrades.
+
 ### Changelog extraction uses a word-bounded heading match
 
 `changelog-extract` finds the CHANGELOG section by matching any H1/H2/H3
