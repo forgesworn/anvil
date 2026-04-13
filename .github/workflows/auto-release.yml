@@ -91,6 +91,16 @@ on:
           compatibility; silently ignored when set.
         required: false
 
+# Serialise auto-release runs on the same branch. Two near-simultaneous
+# pushes would otherwise both compute a next_version, both try to push
+# the tag, and produce confusing partial state where the losing run's
+# commit and tag are left orphaned. cancel-in-progress is intentionally
+# false — we want the in-flight tag/publish to complete, and the later
+# push to re-evaluate from the new HEAD after it settles.
+concurrency:
+  group: auto-release-${{ github.workflow }}-${{ inputs.release-branch }}
+  cancel-in-progress: false
+
 jobs:
   determine:
     runs-on: ubuntu-24.04
