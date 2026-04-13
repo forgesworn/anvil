@@ -39,6 +39,10 @@ pkg="${PACKAGE_JSON:-package.json}"
 # npm pack runs prepack/prepare lifecycle scripts, whose stdout gets
 # mixed into the JSON stream. Strip anything before the opening `[`
 # so jq sees valid JSON regardless of what consumer scripts print.
+# If a prepack script prints its own JSON array before npm's real
+# output, sed captures both and jq would process them as a stream —
+# so we slurp (`-s`) and take the last value, which is reliably npm's
+# own output (prepack runs before npm emits the pack-manifest array).
 pack_raw="$(npm pack --dry-run --json 2>/dev/null)" \
   || die "npm pack --dry-run --json failed"
 pack_json="$(printf '%s\n' "$pack_raw" | sed -n '/^[[{]/,$p')"
@@ -46,10 +50,12 @@ pack_json="$(printf '%s\n' "$pack_raw" | sed -n '/^[[{]/,$p')"
 
 # Extract file paths from the JSON output. npm pack --json returns an
 # array of objects, each with a "files" array containing { "path": ... }.
+# `-s .[-1]` picks the last top-level JSON value in the stream: npm's
+# own output, not a prepack-script injection.
 pack_files=()
 while IFS= read -r f; do
   [[ -n "$f" ]] && pack_files+=("$f")
-done < <(echo "$pack_json" | jq -r '.[0].files[].path // empty')
+done < <(printf '%s\n' "$pack_json" | jq -r -s '.[-1] | .[0].files[].path // empty')
 
 if (( ${#pack_files[@]} == 0 )); then
   die "npm pack reported no files -- nothing to scan"

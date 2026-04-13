@@ -113,6 +113,26 @@ child_nsec = nsec1l3329mrljxtscjzln469xf5drf4qwfe7aq5u73xgw6zl0p6c7p8sd6vumk
   [[ "$output" == *"src/keys/leak.js"* ]]
 }
 
+@test "verify-secrets: prepack that prints fake JSON does not hide real leaks" {
+  # Regression: a malicious or buggy prepack script that prints its own
+  # JSON array (e.g. noise that starts with `[`) used to get merged into
+  # the npm pack JSON stream, which `.[0]` would resolve against the
+  # attacker's array. Now we slurp and pick the last value (npm's own).
+  # If this test fails after a change, the scanner is processing the
+  # wrong JSON object and real secret leaks will be missed.
+  write_package_json '{
+    "name": "pkg",
+    "version": "1.0.0",
+    "files": ["dist"],
+    "scripts": {"prepack": "echo \u0027[{\"files\":[{\"path\":\"only-me.js\"}]}]\u0027"}
+  }'
+  write_file "dist/leak.js" "const key = 'AKIAIOSFODNN7EXAMPLE';"
+  run "$ACTION_ROOT/steps/verify-secrets.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"forbidden content"* ]]
+  [[ "$output" == *"dist/leak.js"* ]]
+}
+
 @test "verify-secrets: fails when package.json is missing" {
   run "$ACTION_ROOT/steps/verify-secrets.sh"
   [ "$status" -eq 1 ]
