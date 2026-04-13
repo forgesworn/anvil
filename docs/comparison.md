@@ -3,6 +3,12 @@
 An honest comparison with the five tools most JS/TS library authors
 consider for release automation. Updated 2026-04.
 
+The supply-chain landscape has shifted: as of mid-2025, release-it and
+np both ship npm OIDC trusted publishing and/or `--provenance`
+support. anvil's differentiation is no longer "the only tool with
+OIDC and provenance" -- it is reproducible-build attestation,
+pack-set secret scanning, and the audit budget itself.
+
 ## At a glance
 
 | | anvil | semantic-release | changesets | release-please | release-it | np |
@@ -12,15 +18,15 @@ consider for release automation. Updated 2026-04.
 | Direct dependencies | **0** | 28 | 26 | n/a | 23 | 36 |
 | Version decision | manual or auto | auto (commits) | manual (changeset files) | auto (commits) | interactive or auto | interactive |
 | CHANGELOG generation | auto (via auto-release.yml) | auto | auto (from changesets) | auto | auto | no |
-| OIDC trusted publishing | yes (required) | optional | no | no | optional | no |
-| SLSA provenance | yes (every publish) | optional | no | no | no | no |
+| OIDC trusted publishing | yes (required) | optional | no | no | yes (since 2025-07) | via npm CLI |
+| SLSA provenance | yes (every publish) | optional | no | no | yes (with OIDC) | yes (`--provenance`) |
 | Reproducible builds | **yes (two-runner)** | no | no | no | no | no |
 | Secret scan | yes | no | no | no | no | no |
 | Exports map verification | yes | no | no | no | no | no |
 | Action-pin auditing | yes | no | no | no | no | no |
 | Monorepo support | no (single-package by design) | via plugins | **native** | yes | via plugins | no |
 | Runtime | bash (CI only) | Node.js | Node.js | TypeScript (CI) | Node.js | Node.js (local) |
-| Auditable in 30 minutes | yes (~1400 lines) | no (~28 deps) | no (~26 deps) | no | no (~23 deps) | no (~36 deps) |
+| Auditable in 30 minutes | yes (~1700 lines) | no (~28 deps) | no (~26 deps) | no | no (~23 deps) | no (~36 deps) |
 
 ## Tool-by-tool
 
@@ -41,7 +47,7 @@ transitive.
 - Secret scanning, exports verification, action-pin auditing
 - OIDC trusted publishing required by default (not optional)
 - SLSA provenance on every publish (not opt-in)
-- Auditable: ~1400 lines of bash vs opaque dependency tree
+- Auditable: ~1700 lines of bash vs opaque dependency tree
 - `verify` mode: you pick the version, the tool catches mistakes.
   No equivalent in semantic-release.
 
@@ -154,17 +160,27 @@ dependencies.
 - Plugin architecture (more extensible)
 - Conventional changelog plugin for auto-changelogs
 - Simpler config for simple projects
+- OIDC trusted publishing with automatic provenance (since July 2025)
+  closes the gap that anvil's earlier pitch leaned on
 
 **What anvil does better:**
 - Zero dependencies (vs ~200 transitive)
-- Reproducible builds, secret scanning, exports verification
-- OIDC trusted publishing and SLSA provenance
-- No local tool installation needed
+- Reproducible-build attestation across two runners (release-it does
+  not offer this)
+- Pack-set secret scanning against the exact files `npm pack` would
+  upload (release-it has no equivalent gate)
+- Exports map verification, runtime-only audit, action-pin audit,
+  frozen-vector gate -- all release-blocking, none of them in
+  release-it
+- Pure bash in CI: ~1400 auditable lines vs Node runtime + plugin
+  surface
 - Harder security guarantees (gates fail the release, not just warn)
 
 **Who should switch:**
-GitHub-only library authors who want stronger supply-chain guarantees
-than release-it provides. GitLab users should stay on release-it.
+GitHub-only library authors who want reproducibility gating and
+pack-set scanning on top of OIDC. If trusted publishing alone is
+the bar, release-it now meets it. GitLab users should stay on
+release-it.
 
 **Migration effort:** Low. See
 [`docs/migration-from-release-it.md`](migration-from-release-it.md).
@@ -183,13 +199,19 @@ designed for CI.
 - Elegant CLI experience
 - Built-in 2FA support
 - No CI setup needed
+- `--provenance` flag for CI publishing (closes the provenance gap
+  that anvil's earlier pitch leaned on)
 
 **What anvil does better:**
-- CI-native: no local tooling, no developer machine dependency
-- OIDC trusted publishing (no long-lived tokens)
-- Reproducible builds, secret scanning, exports verification
-- SLSA provenance on every publish
-- No npm install needed (pure bash in CI)
+- CI-native by design: no local tooling, no developer machine in the
+  trust chain
+- OIDC trusted publishing as the default credential model, not a flag
+  on top of an interactive CLI
+- Reproducible-build attestation across two runners (np does not
+  offer this)
+- Pack-set secret scanning, exports verification, runtime-only audit,
+  action-pin audit, frozen-vector gate -- all release-blocking
+- ~1400 lines of auditable bash vs Node runtime + 36 direct deps
 
 **The philosophy gap:**
 np is "better npm publish from your laptop". anvil is
@@ -273,8 +295,8 @@ This is where anvil's differentiation is clearest.
 
 | Gate | anvil | semantic-release | changesets | release-please | release-it | np |
 |---|---|---|---|---|---|---|
-| OIDC (no stored tokens) | required | opt-in | no | no | opt-in | no |
-| SLSA provenance | every publish | opt-in | no | no | no | no |
+| OIDC (no stored tokens) | required | opt-in | no | no | yes | via npm CLI |
+| SLSA provenance | every publish | opt-in | no | no | yes | opt-in (`--provenance`) |
 | Reproducible builds | two-runner | no | no | no | no | no |
 | Secret scan (pack set) | yes | no | no | no | no | no |
 | Exports map check | yes | no | no | no | no | no |
@@ -304,9 +326,20 @@ anvil is for library authors who:
 1. Already bump versions and write changelogs manually (or want the
    `auto-release.yml` companion workflow to do it with zero dependencies)
 2. Want a publish pipeline that does not make them nervous
-3. Care about supply-chain surface area
-4. Want the only JS release tool that offers reproducible-build
-   attestation
+3. Care about supply-chain surface area enough to read what publishes
+   their code
+4. Want reproducible-build attestation (still no equivalent in
+   semantic-release, changesets, release-please, release-it, or np)
+5. Want pack-set secret scanning against the exact files `npm pack`
+   would upload (no equivalent in any of the above)
+6. Value an audit budget over a feature list: ~1700 lines of bash a
+   reader can verify in a single sitting, vs hundreds of transitive
+   dependencies they cannot
+
+OIDC trusted publishing and SLSA provenance are no longer the wedge:
+release-it and np have caught up. Reproducibility, pack-set scanning,
+and the audit budget are the parts of anvil's posture that nothing
+else in this list offers.
 
 If that's you, the migration from any of the above tools is a
 single-session job. See the migration guides in this directory.

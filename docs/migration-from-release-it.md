@@ -134,7 +134,7 @@ Or with the `auto-release.yml` companion workflow: push conventional commits to 
 | Interactive or CI mode | CI-only |
 | Plugin-based (Git, GitHub, npm) | All-in-one reusable workflow |
 | ~200 transitive deps | Zero release-tool deps |
-| Optional OIDC | OIDC required + SLSA provenance |
+| OIDC + provenance available since 2025-07 | OIDC required, provenance always on |
 | No supply-chain gates | Secret scan, exports check, reproducible builds |
 
 ## What you give up
