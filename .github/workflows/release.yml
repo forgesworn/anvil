@@ -353,17 +353,18 @@ jobs:
 
   publish:
     needs: [build-a, reproduce]
-    # Fail closed: if reproducibility-mode is not 'off' but reproduce did not
-    # succeed (e.g. build-b failed and reproduce got short-circuited to
-    # skipped), refuse to publish. Accepting skipped here unconditionally
-    # would let a strict-mode release ship on a single runner whenever
-    # build-b flakes, silently degrading strict mode to off.
+    # Strict mode must fail closed on a missing reproducibility signal.
+    # reproduce gets short-circuited to 'skipped' when its needs (build-b)
+    # failed; accepting skipped in strict mode would silently degrade a
+    # strict-mode release to single-runner publish. In 'warn' and 'off'
+    # modes reproducibility is explicitly non-blocking, so a skipped
+    # reproduce job still allows publish from build-a.
     if: |
       always() &&
       needs.build-a.result == 'success' &&
       (
         needs.reproduce.result == 'success' ||
-        (needs.reproduce.result == 'skipped' && inputs.reproducibility-mode == 'off')
+        (needs.reproduce.result == 'skipped' && inputs.reproducibility-mode != 'strict')
       )
     runs-on: ubuntu-24.04
     permissions:
