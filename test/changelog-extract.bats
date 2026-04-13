@@ -136,3 +136,41 @@ content two'
   [[ "$output" != *"earlier bug"* ]]
   [[ "$output" != *"pipe delimiters"* ]]
 }
+
+@test "changelog-extract: does not match version as a substring of a larger version" {
+  # Regression: "1.5.0" must not match "## Pre-1.5.0 notes" or "## 1.5.00"
+  # or "## 1.5.0-rc.1". The release body must come from the exact version.
+  write_changelog '# Changelog
+
+## Pre-1.5.0 notes
+
+- should NOT be matched
+
+## 1.5.0-rc.1
+
+- also should NOT be matched
+
+## 1.5.0
+
+- real notes for 1.5.0'
+  VERSION="1.5.0" run "$ACTION_ROOT/steps/changelog-extract.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"real notes for 1.5.0"* ]]
+  [[ "$output" != *"should NOT be matched"* ]]
+}
+
+@test "changelog-extract: matches version with trailing date suffix" {
+  write_changelog '# Changelog
+
+## 1.5.0 (2026-04-11)
+
+- real notes
+
+## 1.4.0 (2026-03-01)
+
+- older'
+  VERSION="1.5.0" run "$ACTION_ROOT/steps/changelog-extract.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"real notes"* ]]
+  [[ "$output" != *"older"* ]]
+}

@@ -228,6 +228,32 @@ EOF
   ! grep -q "GH_CALL: release create" "$GH_LOG"
 }
 
+@test "update-release: skips verify recipe when package name has shell metachars" {
+  # Regression: a malicious / malformed package.json name containing
+  # backticks, $(), semicolons etc. would render verbatim in a copy-paste
+  # shell recipe and could trick an unwary human running it. The recipe
+  # is now skipped for names that don't match the npm grammar.
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  write_package_json '{"name":"pkg;rm -rf /tmp/x","version":"1.0.0","files":["dist"]}'
+  write_file "CHANGELOG.md" '## 1.0.0
+
+- changes
+'
+  write_meta_for "pkg-1.0.0.tgz"
+  export GIT_TAG="v1.0.0"
+
+  run "$ACTION_ROOT/steps/update-release.sh"
+  [ "$status" -eq 0 ]
+
+  # The verify recipe must NOT appear in the release body for a
+  # weirdly-named package.
+  ! grep -q "Verify against the registry tarball" "$GH_LOG"
+  ! grep -q "curl -sLO https://registry.npmjs.org" "$GH_LOG"
+  # The warning must be logged.
+  [[ "$output" == *"unexpected characters"* ]]
+}
+
 @test "update-release: create omits --target when no SHA resolvable" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
 

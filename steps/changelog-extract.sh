@@ -47,6 +47,13 @@ fi
 # through as content. This is needed because semantic-release mixes H1
 # and H2 for version headings depending on bump type, so level-based
 # stopping is unreliable.
+#
+# Version match is word-bounded: `1.2.3` in a heading like `## Pre-1.2.3`
+# or `## 1.2.30` must NOT match the release for `1.2.3`. We require the
+# version to be preceded by start-of-line or a non-version character
+# (whitespace, `v`, punctuation) and followed by end-of-line or a
+# non-version character. An optional leading `v` is allowed on either
+# side so `## v1.2.3` matches when `version=1.2.3`.
 set +e
 awk -v ver="$version" '
   function is_version_heading(line) {
@@ -56,10 +63,24 @@ awk -v ver="$version" '
     if (line ~ /v?[0-9]+\.[0-9]+\.[0-9]+/) return 1
     return 0
   }
+  function version_matches(line, ver,   bare, re) {
+    # Strip an optional leading `v` from the needle so `## 1.2.3`
+    # matches when caller passes `v1.2.3` and vice versa.
+    bare = ver
+    sub(/^v/, "", bare)
+    # Escape regex metacharacters in the version (dots especially).
+    gsub(/[.+*?(){}|\\^$\[\]]/, "\\\\&", bare)
+    # Word-bounded: preceded by start-of-line, whitespace, or
+    # punctuation (brackets, parens, colon). Followed by end-of-line,
+    # whitespace, or punctuation. A leading `v` on the heading is
+    # consumed so "## v1.2.3" still matches.
+    re = "(^|[^0-9A-Za-z._-])v?" bare "([^0-9A-Za-z._-]|$)"
+    return (line ~ re)
+  }
   BEGIN { capturing = 0 }
   {
     if (!capturing) {
-      if (is_version_heading($0) && index($0, ver) > 0) {
+      if (is_version_heading($0) && version_matches($0, ver)) {
         capturing = 1
         next
       }

@@ -54,6 +54,8 @@ of the defences listed below, that change needs explicit justification.
 | A bug in the action's own bash that allows command injection | Mitigated by code review and small surface area, not eliminated. Report bugs through issues. |
 | Supply-chain attack on `gh`, `jq`, `npm`, `awk`, `sed`, `find`, `grep` themselves | Mitigated by using the GitHub-managed runner image, which is SHA-pinned to a runner release, not eliminated. |
 | Leaked GitHub Actions OIDC claims reused by a third party | Mitigated by the short OIDC token lifetime (~10 minutes) and the npm registry's trusted-publisher repo/workflow matching, not eliminated. |
+| Supply-chain substitution of the `jsr` CLI package at publish time | JSR publish is opt-in (requires `jsr.json` in the consumer repo). `publish-jsr.sh` pins `jsr@${JSR_CLI_VERSION}` by semver, not integrity: a maintainer-account compromise of the `jsr` npm package within npm's 72-hour republish-after-unpublish window could substitute bytes while keeping the version string. Mitigated by the version pin and opt-in posture; not eliminated. Bump `JSR_CLI_VERSION` only after manually verifying the tarball SHA against a known-good release. |
+| `@v0` (major) floating tag auto-adoption after a compromised release | `self-release.yml` force-advances the `v0` tag on every release so consumers pinned `@v0` get new versions without pin bumps. A single compromised commit that passes anvil's own self-release gates would auto-propagate to every consumer pinned `@v0`. This is the same trust property as `actions/checkout@v4`, `actions/setup-node@v6`, and every other action that offers a floating major tag. Consumers who want a stronger guarantee should pin anvil to a 40-char SHA and set `strict-action-pins: true` in their caller workflow. |
 
 ## Trust boundaries
 
@@ -166,17 +168,16 @@ The `verify-action-pins` gate has two known false negatives:
    action references through matrix expressions should audit those
    templates separately.
 
-### Changelog extraction matches version as substring
+### Changelog extraction uses a word-bounded heading match
 
 `changelog-extract` finds the CHANGELOG section by matching any H1/H2/H3
-heading whose text contains both the version string and a dotted numeric
-pattern. This means a version `1.5.0` could in theory match a heading
-like `## Pre-1.5.0 notes`.
-
-In practice this has not happened, and fixing it (word-boundary match)
-has a cost in CHANGELOG flexibility (some tools emit headings like
-`## 1.5.0 (2026-04-11)` where a strict match would also need to handle
-the date suffix). The current behaviour is a pragmatic trade-off.
+heading whose text contains both a dotted numeric version pattern and
+the target version with word boundaries around it. The boundary is
+"preceded by start-of-line or a non-version character, followed by
+end-of-line or a non-version character", with an optional leading `v`
+consumed. This correctly accepts `## 1.5.0`, `## v1.5.0`,
+`## 1.5.0 (2026-04-11)`, and `### [1.5.0] - 2026-04-11`, and correctly
+rejects `## Pre-1.5.0`, `## 1.5.0-rc.1`, `## 1.5.00`, and `## 11.5.0`.
 
 ## Reporting vulnerabilities
 

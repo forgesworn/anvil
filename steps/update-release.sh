@@ -116,7 +116,14 @@ ${integrity}
 EOF
 )"
 
-    if [[ -n "$name" ]]; then
+    # Validate the package name against npm's grammar before embedding it
+    # in a copy-paste shell recipe. A malicious package.json name
+    # containing shell metacharacters (backticks, $( ), ; etc.) would
+    # render verbatim in the release body and could trick an unwary
+    # human running the verify recipe. Only names matching the npm
+    # grammar get a verify recipe; anything weirder is silently skipped.
+    npm_name_re='^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$'
+    if [[ -n "$name" && "$name" =~ $npm_name_re ]]; then
       # Compute the registry-side tarball filename. For unscoped packages
       # the local `npm pack` filename matches the registry filename. For
       # scoped packages npm flattens the scope with a dash in the local
@@ -150,6 +157,8 @@ shasum -a 256 ${registry_filename}
 EOF
 )"
       integrity_block="${integrity_block}${verify_recipe}"
+    elif [[ -n "$name" ]]; then
+      warn "package name '$name' contains unexpected characters — skipping verify recipe"
     fi
 
     notes="${notes}${integrity_block}"
