@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.5 (2026-04-13)
+
+### Bug Fixes
+
+- preserve non-blocking semantics of warn reproducibility-mode
+- tighten changelog-extract to word-bounded version match and sanitise name in verify recipe
+- serialise auto-release runs on the same branch
+- harden npm pack JSON parse against prepack-script injection
+- verify-action-pins parses quoted uses: lines correctly
+- close reproduce-skipped bypass in strict mode
+
+
+
 ## 0.8.4 (2026-04-12)
 
 ### Docs
