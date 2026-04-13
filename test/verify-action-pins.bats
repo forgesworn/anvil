@@ -158,6 +158,32 @@ jobs:
   [[ "$output" != *"actions/checkout@11bd71"* ]]
 }
 
+@test "verify-action-pins: double-quoted uses: line is parsed correctly (self-exempt)" {
+  write_workflow release.yml '
+jobs:
+  release:
+    uses: "forgesworn/anvil/.github/workflows/release.yml@abcdef0123456789abcdef0123456789abcdef01"
+'
+  STRICT_ACTION_PINS=1 run "$ACTION_ROOT/steps/verify-action-pins.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unpinned action"* ]]
+  [[ "$output" != *"forgesworn/anvil is not SHA-pinned"* ]]
+}
+
+@test "verify-action-pins: single-quoted uses: line on a tag-pinned action is flagged" {
+  write_workflow ci.yml "
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: 'actions/checkout@v4'
+"
+  run "$ACTION_ROOT/steps/verify-action-pins.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unpinned action"* ]]
+  [[ "$output" == *"actions/checkout@v4"* ]]
+}
+
 @test "verify-action-pins: ignores commented-out uses: lines" {
   write_workflow ci.yml '
 jobs:

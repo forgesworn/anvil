@@ -74,7 +74,7 @@ for file in "${files[@]}"; do
     # prefixed by `#` and the anchored regex below skips them.
     line="$(printf '%s' "$content" | sed -E 's/^[[:space:]]*-?[[:space:]]*//')"
 
-    if [[ "$line" =~ ^uses:[[:space:]]*([^@[:space:]#]+)@([^[:space:]#]+) ]]; then
+    if [[ "$line" =~ ^uses:[[:space:]]*[\"\']?([^@[:space:]#\"\']+)@([^[:space:]#\"\']+) ]]; then
       action="${BASH_REMATCH[1]}"
       ref="${BASH_REMATCH[2]}"
       total_count=$((total_count + 1))
