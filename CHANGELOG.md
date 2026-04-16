@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.6 (2026-04-16)
+
+### Bug Fixes
+
+- wait for tag ref propagation before dispatching release
+
+
+
 ## 0.8.5 (2026-04-13)
 
 ### Bug Fixes
