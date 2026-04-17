@@ -176,11 +176,15 @@ jobs:
       # reproducibility-mode: Strict (capital S) or any unlisted
       # value would otherwise silently degrade to the weakest mode
       # because the downstream expression compares strictly.
+      # Route input through env: so the value is not string-substituted
+      # into the shell script before bash parses it.
       - name: Validate inputs
+        env:
+          MODE: ${{ inputs.reproducibility-mode }}
         run: |
-          case "${{ inputs.reproducibility-mode }}" in
+          case "$MODE" in
             strict|warn|off) : ;;
-            *) echo "::error::reproducibility-mode must be one of: strict, warn, off (got: '${{ inputs.reproducibility-mode }}')"; exit 1 ;;
+            *) echo "::error::reproducibility-mode must be one of: strict, warn, off (got: '$MODE')"; exit 1 ;;
           esac
 
       - name: Checkout consumer repo
