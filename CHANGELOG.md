@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.7 (2026-04-17)
+
+### Bug Fixes
+
+- route reproducibility-mode input through env in the new validation step
+- support subpath pattern exports and document anchor limitation
+- validate reproducibility-mode input and tighten workflow consistency
+- harden record-tarball filename validation and publish-npm diagnostics
+
+
+
 ## 0.8.6 (2026-04-16)
 
 ### Bug Fixes
