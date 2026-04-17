@@ -43,7 +43,13 @@ case "${1:-}" in
       printf '%s\n' "$NPM_VIEW_INTEGRITY"
       exit 0
     fi
-    # Mimic real npm view: missing version exits non-zero on stderr.
+    if [[ -n "${NPM_VIEW_ERROR:-}" ]]; then
+      printf '%s\n' "$NPM_VIEW_ERROR" >&2
+      exit 1
+    fi
+    # Default: mimic real npm view on a missing version with E404.
+    printf 'npm ERR! code E404\n' >&2
+    printf 'npm ERR! 404 Not Found - GET https://registry.npmjs.org/x\n' >&2
     exit 1
     ;;
   publish)
@@ -66,6 +72,7 @@ teardown() {
   unset TARBALL_META_DIR
   unset NPM_LOG
   unset NPM_VIEW_INTEGRITY
+  unset NPM_VIEW_ERROR
 }
 
 # Build a complete fixture: package.json + tarball.meta + tarball file.
@@ -215,6 +222,34 @@ EOF
   [ "$status" -eq 1 ]
   [[ "$output" == *"suspicious filename"* ]]
   ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
+}
+
+@test "publish-npm: refuses to publish when npm view fails with a non-404 error" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  # Simulate a transient registry failure that is NOT E404. If we
+  # treated this as "not on registry; publish", a concurrent substitution
+  # attack during a flaky view would escape the integrity alarm.
+  export NPM_VIEW_ERROR="npm ERR! network request failed: ETIMEDOUT"
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot confirm registry state"* ]]
+  ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
+}
+
+@test "publish-npm: proceeds when npm view returns E404 (version absent)" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  # Default fake-npm behaviour (no NPM_VIEW_INTEGRITY, no NPM_VIEW_ERROR)
+  # already emits E404 to stderr; the test makes the expectation explicit.
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"not on registry (E404)"* ]]
+  grep -q "publish --access public $meta_dir/test-pkg-1.0.0.tgz" "$NPM_LOG"
 }
 
 @test "publish-npm: scoped package publishes the unscoped-prefixed local pack" {

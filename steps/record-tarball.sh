@@ -83,6 +83,21 @@ unpacked="$(printf '%s\n' "$pack_json" | jq -r -s '.[-1] | .[0].unpackedSize // 
 [[ -n "$filename"  ]] || die "could not parse filename from npm pack --json"
 [[ -n "$integrity" ]] || die "could not parse integrity from npm pack --json"
 
+# Defend against a hostile package.json (malicious `.name`) or a rogue
+# lifecycle script that interposes JSON with a crafted `.filename`. npm's
+# own tarball naming is `${flattened_name}-${version}.tgz` — only
+# URL-safe characters plus `.` and `-`. Anything else indicates the
+# source JSON was manipulated. Downstream scripts (publish-npm,
+# update-release) assume these guarantees when constructing paths and
+# writing to $GITHUB_OUTPUT; enforce them here too so the meta file
+# never contains a malformed entry.
+if [[ "$filename" =~ [[:space:]=] ]] \
+   || [[ "$filename" == *..* ]] \
+   || [[ "$filename" == /* ]] \
+   || [[ ! "$filename" =~ \.tgz$ ]]; then
+  die "suspicious tarball filename from npm pack: $filename"
+fi
+
 # `npm pack --json` returns the on-disk basename in .filename, which is
 # what --pack-destination wrote. Scoped packages are flattened (e.g.
 # @scope/name -> scope-name-1.0.0.tgz).

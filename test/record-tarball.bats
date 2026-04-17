@@ -105,6 +105,64 @@ teardown() {
   [ "$sha_a" = "$sha_b" ]
 }
 
+@test "record-tarball: rejects path-traversal filename from a rogue pack lifecycle" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  # Shim npm so `npm pack --json` emits a malicious trailing JSON whose
+  # .filename attempts path traversal. jq's `-s | .[-1]` selects the
+  # last top-level value, simulating a `postpack` script that interposes
+  # after npm's real output.
+  bin_dir="$FIXTURE_DIR/bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/npm" <<'NPM'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "pack" ]]; then
+  cat <<'JSON'
+[{"filename":"legit-1.0.0.tgz","integrity":"sha512-OK","size":1,"unpackedSize":1}]
+[{"filename":"../../etc/passwd","integrity":"sha512-EVIL","size":1,"unpackedSize":1}]
+JSON
+  exit 0
+fi
+exit 0
+NPM
+  chmod +x "$bin_dir/npm"
+  export PATH="$bin_dir:$PATH"
+
+  write_package_json '{"name":"test-pkg","version":"1.0.0","files":["index.js"]}'
+  write_file "index.js" "x"
+
+  run "$ACTION_ROOT/steps/record-tarball.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"suspicious tarball filename"* ]]
+}
+
+@test "record-tarball: rejects filename containing newline or equals sign" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  # A filename with `=` would corrupt the key=value meta file; a newline
+  # would inject extra lines. Both must be refused before the meta file
+  # is written.
+  bin_dir="$FIXTURE_DIR/bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/npm" <<'NPM'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "pack" ]]; then
+  printf '[{"filename":"evil=1.0.0.tgz","integrity":"sha512-X","size":1,"unpackedSize":1}]\n'
+  exit 0
+fi
+exit 0
+NPM
+  chmod +x "$bin_dir/npm"
+  export PATH="$bin_dir:$PATH"
+
+  write_package_json '{"name":"test-pkg","version":"1.0.0","files":["index.js"]}'
+  write_file "index.js" "x"
+
+  run "$ACTION_ROOT/steps/record-tarball.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"suspicious tarball filename"* ]]
+}
+
 @test "record-tarball: fails when SOURCE_DATE_EPOCH is unset and no git is available" {
   command -v npm >/dev/null 2>&1 || skip "npm not available"
 

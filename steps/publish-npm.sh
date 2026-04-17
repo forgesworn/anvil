@@ -79,15 +79,36 @@ tarball_path="$meta_dir/$filename"
 # CI built. That is exactly the registry tarball substitution scenario,
 # and we surface it loudly rather than silently re-using the registry
 # copy.
-if registry_integrity="$(npm view "${name}@${version}" dist.integrity 2>/dev/null)" \
-   && [[ -n "$registry_integrity" ]]; then
-  if [[ "$registry_integrity" == "$recorded_integrity" ]]; then
-    ok "${name}@${version} already on registry with matching integrity — nothing to publish"
-    exit 0
+#
+# `npm view` fails with E404 when the version does not exist on the
+# registry — that is the "clean first publish" case and we must fall
+# through. Any other non-zero exit (network outage, auth failure,
+# registry misconfiguration) is NOT evidence that the version is
+# absent; treating it as such would weaken the substitution-alarm
+# diagnostic if `npm view` were flaking at the same moment as an
+# earlier byte-substitution attack. Fail closed and force the
+# maintainer to re-run with a healthy registry connection.
+view_err="$(mktemp)"
+trap 'rm -f "$view_err"' EXIT
+if registry_integrity="$(npm view "${name}@${version}" dist.integrity 2>"$view_err")"; then
+  if [[ -n "$registry_integrity" ]]; then
+    if [[ "$registry_integrity" == "$recorded_integrity" ]]; then
+      ok "${name}@${version} already on registry with matching integrity — nothing to publish"
+      exit 0
+    fi
+    warn "registry integrity: $registry_integrity"
+    warn "local integrity:    $recorded_integrity"
+    die "${name}@${version} on registry does not match locally built tarball — possible registry substitution or non-deterministic build; investigate before re-running"
   fi
-  warn "registry integrity: $registry_integrity"
-  warn "local integrity:    $recorded_integrity"
-  die "${name}@${version} on registry does not match locally built tarball — possible registry substitution or non-deterministic build; investigate before re-running"
+  # `npm view` succeeded but returned empty — the version is unpublished
+  # (npm keeps the name but erases the dist block). Proceed to publish.
+else
+  if ! grep -qE 'E404|is not in this registry|code E404' "$view_err"; then
+    warn "npm view failed with a non-404 error:"
+    cat "$view_err" >&2 || true
+    die "cannot confirm registry state for ${name}@${version}; refusing to publish until the registry is reachable"
+  fi
+  log "${name}@${version} not on registry (E404) — proceeding to publish"
 fi
 
 # Note: --provenance is NOT passed on the CLI. Instead we rely on
