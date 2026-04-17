@@ -1,9 +1,9 @@
 name: anvil
 description: >-
-  Hardened npm publish for JS/TS libraries. OIDC trusted publishing,
-  SLSA provenance, secret scan, exports check, frozen-vector gate,
-  action-pin auditing. Zero dependencies, pure bash, auditable in
-  thirty minutes.
+  Supply-chain-hardened npm publish for JS/TS libraries. OIDC trusted
+  publishing, SLSA provenance, secret scan, exports check,
+  frozen-vector gate, action-pin auditing. Zero dependencies, pure
+  bash, auditable in thirty minutes.
 author: forgesworn
 
 branding:

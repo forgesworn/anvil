@@ -107,6 +107,23 @@ Libraries with frozen test vectors can add a gate:
       vector-test-command: npm run test:vectors
 ```
 
+### Preconditions
+
+Before the first run, your library must have:
+
+- `"publishConfig": { "provenance": true }` in `package.json` (drives
+  SLSA provenance without requiring a `--provenance` CLI flag — npm
+  11.6+ short-circuits to `ENEEDAUTH` when the flag is passed
+  explicitly, so the config path is the only reliable one).
+- npm trusted publisher configured for **your repo** and **your
+  caller workflow file** (see "Trusted publisher caveat" below for
+  the exact fields).
+- The package published to npm at least once. OIDC trusted publishing
+  requires the package to exist on the registry — see "First publish
+  of a new package" for the one-time bootstrap.
+- A `CHANGELOG.md` entry for the version you are releasing (the
+  action extracts the release body from it).
+
 Then:
 
 1. Configure [npm trusted publishing](https://docs.npmjs.com/trusted-publishers)

@@ -379,7 +379,7 @@ Composite action callers must add `actions/checkout` before the step
 ```yaml
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       id-token: write
