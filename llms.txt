@@ -52,6 +52,20 @@ caller workflow file (not forgesworn/anvil). Bump package.json,
 tag, push, create a GitHub Release. The workflow handles everything
 else.
 
+## Preconditions
+
+Before the first run, your library must have:
+
+- `"publishConfig": { "provenance": true }` in `package.json` (drives
+  SLSA provenance; npm 11.6+ short-circuits to `ENEEDAUTH` when
+  `--provenance` is passed as a CLI flag, so the config path is the
+  only reliable one).
+- npm trusted publisher configured for your repo and your caller
+  workflow file (not `forgesworn/anvil`).
+- The package must exist on npm — trusted publishing requires a
+  prior manual publish to bootstrap.
+- A `CHANGELOG.md` entry for the version being released.
+
 ## Auto-release (zero-dep semantic-release replacement)
 
 For fully automatic releases from conventional commits on main, add

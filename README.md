@@ -590,6 +590,13 @@ The composite action runs the same step scripts the reusable workflow
 does. The reusable workflow remains the documented default because it
 bakes the correct `permissions:` block in.
 
+**Caveat:** the composite action cannot run the multi-job
+reproducible-build DAG (composite actions are flat lists of steps
+inside one job). `reproducibility-mode` is silently ignored on this
+surface. If you need the v0.4 flagship reproducibility gate **and**
+custom pre-steps, the reusable workflow does not yet support extra
+pre-steps — open an issue if this gap blocks you.
+
 ## Pinning
 
 Pin by tag (`@v0` while MVP, `@v1` when stable) for stable pins, or by
