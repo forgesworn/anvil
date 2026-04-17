@@ -88,6 +88,36 @@ teardown() {
   [[ "$output" == *"no exports or legacy entry points"* ]]
 }
 
+@test "verify-exports: passes for a subpath pattern whose prefix directory exists" {
+  write_package_json '{
+    "name": "pkg",
+    "version": "1.0.0",
+    "exports": {
+      "./feat/*": "./dist/feat/*.js"
+    }
+  }'
+  mkdir -p "$FIXTURE_DIR/dist/feat"
+  write_file "dist/feat/alpha.js" "export {};"
+  run "$ACTION_ROOT/steps/verify-exports.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pattern"* ]]
+}
+
+@test "verify-exports: fails for a subpath pattern whose prefix directory is missing" {
+  write_package_json '{
+    "name": "pkg",
+    "version": "1.0.0",
+    "exports": {
+      "./feat/*": "./disty/feat/*.js"
+    }
+  }'
+  mkdir -p "$FIXTURE_DIR/dist/feat"
+  write_file "dist/feat/alpha.js" "export {};"
+  run "$ACTION_ROOT/steps/verify-exports.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing pattern prefix"* ]]
+}
+
 @test "verify-exports: handles deeply nested conditional exports" {
   write_package_json '{
     "name": "pkg",

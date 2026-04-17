@@ -98,7 +98,20 @@ for t in "${all[@]}"; do
   (( skip )) && continue
   checked+=("$t")
 
-  if [[ -e "$t" ]]; then
+  # Subpath patterns (`./feat/*` → `./dist/feat/*.js`) are a first-class
+  # exports feature: the `*` is expanded by the Node resolver at import
+  # time, so the literal path never exists on disk. Check the directory
+  # prefix before the `*` instead, so a typo'd `./disty/feat/*.js` still
+  # fails closed without blocking legitimate pattern consumers.
+  if [[ "$t" == *'*'* ]]; then
+    prefix="${t%%\**}"
+    if [[ -z "$prefix" || -d "${prefix%/}" ]]; then
+      log "ok  $t (pattern, prefix ${prefix%/} exists)"
+    else
+      warn "missing pattern prefix: ${prefix%/} (from $t)"
+      missing+=("$t")
+    fi
+  elif [[ -e "$t" ]]; then
     log "ok  $t"
   else
     warn "missing: $t"

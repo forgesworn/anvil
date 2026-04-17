@@ -150,7 +150,7 @@ flagship guarantee.
 
 ### `verify-action-pins` exempts `forgesworn/anvil` and skips dynamic uses
 
-The `verify-action-pins` gate has two known false negatives:
+The `verify-action-pins` gate has three known false negatives:
 
 1. **Self-exemption.** Lines whose action name is `forgesworn/anvil`
    or starts with `forgesworn/anvil/` are not flagged, even in
@@ -167,6 +167,14 @@ The `verify-action-pins` gate has two known false negatives:
    resolved statically and is silently ignored. Consumers who template
    action references through matrix expressions should audit those
    templates separately.
+3. **YAML anchors and aliases.** The gate is a line-oriented grep, not
+   a YAML parser. An anchor definition like `_shared: &pin actions/checkout@v4`
+   followed by `uses: *pin` is invisible to the scan: the anchor line
+   has no `uses:` prefix, and the alias line has no `owner/repo@ref`
+   to inspect. The bash-only audit budget rules out a full YAML parse.
+   Consumers using anchors/aliases to deduplicate `uses:` references
+   should SHA-pin the anchor target directly, since the alias cannot be
+   audited by the gate.
 
 ### Secret-scan pack-set selection relies on npm output ordering
 
