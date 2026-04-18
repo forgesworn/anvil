@@ -280,13 +280,18 @@ jobs:
           # gh-workflow-run resolves refs through a different path that
           # can lag by several seconds.
           echo "Waiting for $TAG to resolve on $REPO..."
-          for i in 1 2 3 4 5 6; do
+          # 12 attempts × 5s = 60s total. Observed propagation lag exceeded
+          # the previous 30s budget more than once on forgesworn/signet,
+          # aborting dispatch even though the tag was on the way. 60s
+          # gives comfortable headroom without materially slowing the
+          # happy path (which typically resolves on attempt 1).
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             if gh api "repos/$REPO/git/ref/tags/$TAG" --silent 2>/dev/null; then
               echo "Tag $TAG resolved after attempt $i."
               break
             fi
-            if [[ $i -eq 6 ]]; then
-              echo "::error::Tag $TAG not resolvable after 30s. Aborting dispatch."
+            if [[ $i -eq 12 ]]; then
+              echo "::error::Tag $TAG not resolvable after 60s. Aborting dispatch."
               exit 1
             fi
             sleep 5
