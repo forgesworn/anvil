@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.8 (2026-04-18)
+
+### Bug Fixes
+
+- double tag-propagation retry budget to 60s (auto-release)
+
+
+
 ## 0.8.7 (2026-04-17)
 
 ### Bug Fixes

@@ -1,6 +1,6 @@
 {
   "name": "forgesworn-anvil",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "private": true,
   "description": "Supply-chain-hardened release tool for JS/TS libraries. Multi-runner reproducible-build attestation, OIDC trusted publishing, hard pre-publish gates. Pure bash, zero dependencies.",
   "license": "MIT",
