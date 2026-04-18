@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.9 (2026-04-18)
+
+### Bug Fixes
+
+- create annotated tags so --follow-tags actually pushes them (release)
+
+
+
 ## 0.8.8 (2026-04-18)
 
 ### Bug Fixes
