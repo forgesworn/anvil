@@ -247,7 +247,11 @@ jobs:
           fi
 
           git commit -m "chore(release): ${NEXT_VERSION}"
-          git tag "v${NEXT_VERSION}"
+          # Annotated tag (-a) — `git push --follow-tags` silently skips
+          # lightweight tags, leaving them local-only. Observed in the wild
+          # on forgesworn/signet: the commit landed but the tag never did,
+          # so dispatch-release couldn't resolve it regardless of retry budget.
+          git tag -a "v${NEXT_VERSION}" -m "Release v${NEXT_VERSION}"
           git push origin HEAD --follow-tags
           echo "tag=v${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
 
