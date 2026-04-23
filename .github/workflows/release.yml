@@ -157,6 +157,11 @@ on:
         required: false
         type: string
         default: 'false'
+      publish-environment:
+        description: GitHub Environment used by the publish job and npm trusted publisher environment field
+        required: false
+        type: string
+        default: 'npm-publish'
       debug:
         description: If "true", run a diagnostic step before publish that dumps npm version, redacted .npmrc, OIDC env vars, and npm config. Useful for debugging trusted-publisher setup issues. Off by default.
         required: false
@@ -205,11 +210,16 @@ jobs:
       - name: Validate inputs
         env:
           MODE: ${{ inputs.reproducibility-mode }}
+          PUBLISH_ENVIRONMENT: ${{ inputs.publish-environment }}
         run: |
           case "$MODE" in
             strict|warn|off) : ;;
             *) echo "::error::reproducibility-mode must be one of: strict, warn, off (got: '$MODE')"; exit 1 ;;
           esac
+          if [[ -z "$PUBLISH_ENVIRONMENT" ]]; then
+            echo "::error::publish-environment must not be empty"
+            exit 1
+          fi
 
       - name: Checkout consumer repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -415,6 +425,8 @@ jobs:
         (needs.reproduce.result == 'skipped' && inputs.reproducibility-mode != 'strict')
       )
     runs-on: ubuntu-24.04
+    environment:
+      name: ${{ inputs.publish-environment }}
     permissions:
       contents: write
       id-token: write
