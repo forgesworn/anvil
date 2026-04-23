@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 (2026-04-23)
+
+### Features
+
+- lock publish to OIDC and a protected GitHub Environment (#6)
+
+
+
 ## 0.9.0 (2026-04-23)
 
 ### Features
