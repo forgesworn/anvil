@@ -42,6 +42,7 @@ of the defences listed below, that change needs explicit justification.
 | Race between parallel releases publishing the same version twice | `publish-npm` is idempotent: if the exact version is already on the registry, it exits `0` without re-publishing. |
 | Registry tarball substitution between publish and consumer fetch | `record-tarball` packs the artefact once and writes its sha512 (npm integrity format) plus sha256 to a meta file. `publish-npm` uploads that exact tarball — not a re-pack — and on a clean re-run compares the registry's `dist.integrity` to the recorded value: a mismatch fails the workflow loudly. The hashes are also stamped into the GitHub Release body so consumers can `curl | shasum` the registry tarball at any time. |
 | Compromised third-party action re-pointed at malicious code via tag mutation (the `tj-actions/changed-files` 2025-03 vector) | `verify-action-pins` walks `.github/workflows/*.yml` in the consumer repo and warns on any `uses: owner/repo@ref` line whose ref is not a 40-char hex SHA. Warn-only by default; `strict-action-pins: true` promotes to fail. |
+| Compromised publish credential used to ship a malicious `preinstall` / `install` / `postinstall` hook (the April 2026 `@bitwarden/cli@2026.4.0` / TeamPCP–Checkmarx vector) | `verify-lifecycle-scripts` reads the consumer's `package.json` and flags any install-time hook not matching an explicit `allowed-lifecycle-scripts` allowlist. Warn-only by default; `lifecycle-scripts-policy: strict` promotes to fail. Combined with OIDC trusted publishing (no long-lived `NPM_TOKEN` to exfiltrate), this closes the primary payload mechanism used by that campaign. |
 | Non-deterministic build masking a regression in compiled output | The reusable workflow runs **two parallel builds on independent runners**, both packed with normalised mtimes and `SOURCE_DATE_EPOCH` derived from `git log`. The `reproduce` job compares the two sha256s and (under the default `reproducibility-mode: strict`) refuses to publish on mismatch. This catches embedded build timestamps, sorted-by-fs globs, random IDs, and host-path leakage — the common ways non-determinism slips into a JS bundle. Stronger than SLSA provenance: provenance attests one runner built these bytes once; reproduce attests two runners arrive at the same bytes. |
 
 ## Threats explicitly NOT addressed
@@ -55,6 +56,7 @@ of the defences listed below, that change needs explicit justification.
 | Supply-chain attack on `gh`, `jq`, `npm`, `awk`, `sed`, `find`, `grep` themselves | Mitigated by using the GitHub-managed runner image, which is SHA-pinned to a runner release, not eliminated. |
 | Leaked GitHub Actions OIDC claims reused by a third party | Mitigated by the short OIDC token lifetime (~10 minutes) and the npm registry's trusted-publisher repo/workflow matching, not eliminated. |
 | Supply-chain substitution of the `jsr` CLI package at publish time | JSR publish is opt-in (requires `jsr.json` in the consumer repo). `publish-jsr.sh` pins `jsr@${JSR_CLI_VERSION}` by semver, not integrity: a maintainer-account compromise of the `jsr` npm package within npm's 72-hour republish-after-unpublish window could substitute bytes while keeping the version string. Mitigated by the version pin and opt-in posture; not eliminated. Bump `JSR_CLI_VERSION` only after manually verifying the tarball SHA against a known-good release. |
+| Compromised third-party action running in a sibling job that can see publish credentials | Out of anvil's enforcement reach. anvil controls the jobs it defines in `release.yml`; a consumer workflow that runs a third-party action (Trivy, KICS, linters, custom scanners) in a separate job of the same run must either not expose `secrets.*` to that job, or not have an `NPM_TOKEN` secret to expose at all. OIDC trusted publishing already removes the primary long-lived target; see the "isolating third-party actions" note under Known limitations. |
 | `@v0` (major) floating tag auto-adoption after a compromised release | `self-release.yml` force-advances the `v0` tag on every release so consumers pinned `@v0` get new versions without pin bumps. A single compromised commit that passes anvil's own self-release gates would auto-propagate to every consumer pinned `@v0`. This is the same trust property as `actions/checkout@v4`, `actions/setup-node@v6`, and every other action that offers a floating major tag. Consumers who want a stronger guarantee should pin anvil to a 40-char SHA and set `strict-action-pins: true` in their caller workflow. |
 
 ## Trust boundaries
@@ -187,6 +189,50 @@ If npm ever reordered so that prepack output came after the manifest
 selection would pick prepack output instead and the scan could become
 bypassable. This is a stable contract today but worth re-checking on
 major npm upgrades.
+
+### `verify-lifecycle-scripts` only covers install-time hooks
+
+The gate inspects `preinstall`, `install`, and `postinstall` — the three
+hooks npm runs automatically on `npm install <pkg>` for every consumer.
+It does **not** inspect `prepare`, `prepack`, `prepublish`, or
+`prepublishOnly`: those fire on the publisher's machine at pack/publish
+time, not on the consumer, and are already scoped to the trusted publish
+job. A malicious `prepack` in a consumer repo would run on anvil's own
+runner during `record-tarball.sh` — a separate concern that sits at the
+trust boundary between consumer build tooling and the action itself,
+covered by the "untrusted consumer build" boundary below.
+
+The gate also does not detect malicious code loaded from the package's
+main entry (`require`/`import` side effects that run on first use), nor
+code loaded by a native-module binding, nor anything inside a bundled
+runtime. Those attacker paths avoid the lifecycle-hook mechanism
+entirely; the gate is a targeted block on the *specific* shape used in
+the April 2026 Bitwarden compromise, not a general malicious-code
+detector. Consumers who want that stronger guarantee need code review
+and/or signed commits, which are out of scope.
+
+### Isolating third-party actions from publish credentials
+
+anvil's own `release.yml` jobs do not expose any long-lived secret to
+step scripts — OIDC is minted inside the publish job with a ~10-minute
+lifetime and `id-token: write` scoped to that job only. The consumer is
+responsible for not leaking secrets into *sibling* jobs of the same
+workflow run. If a consumer adds a Trivy/KICS/lint job to their release
+workflow and sets `env: NPM_TOKEN: ${{ secrets.NPM_TOKEN }}` on it
+(defeating the point of OIDC), a compromised third-party action in that
+sibling job can still exfiltrate the token and publish out-of-band later.
+
+Mitigations a consumer should apply:
+
+1. **Delete any `NPM_TOKEN` secret.** With OIDC trusted publishing
+   configured on npm, it is unused; keeping it is the whole attack
+   surface.
+2. **Run third-party scanners in a separate workflow**, not a sibling
+   job of the release workflow. A scanner triggered on `pull_request`
+   or `push` never sees the release context's secrets.
+3. **Pin every third-party action by 40-char SHA** and enable
+   `strict-action-pins: true` so `verify-action-pins` fails the release
+   on any unpinned reference.
 
 ### Changelog extraction uses a word-bounded heading match
 
