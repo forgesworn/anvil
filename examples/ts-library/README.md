@@ -114,7 +114,7 @@ One-off setup on `npmjs.com`:
      manual and auto flows, because `auto-release.yml` dispatches
      `release.yml` as the OIDC entry-point. **Not** the reusable
      workflow inside `forgesworn/anvil`.
-   - **Environment**: leave empty
+   - **Environment**: `npm-publish`
 
 npm matches against the OIDC token's `workflow_ref` claim (the caller),
 not `job_workflow_ref` (the reusable workflow). This is the single most
@@ -122,6 +122,10 @@ non-obvious thing about the pattern and the most common failure mode
 the first time through. See the root README's
 [Trusted publisher caveat](../../README.md#trusted-publisher-caveat-important)
 section for the full story.
+
+Create a matching GitHub Environment named `npm-publish` if you want
+required reviewers, prevent self-review, or release-branch/tag
+restrictions before the publish job can mint its OIDC token.
 
 ## Optional: dual-publish to JSR
 

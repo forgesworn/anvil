@@ -260,8 +260,9 @@ the deliberate upgrade.
 Authors who adopted JS-DevTools/npm-publish for its simplicity but
 now want supply-chain guarantees on top of OIDC.
 
-**Migration effort:** Minimal. Swap the caller workflow;
-OIDC trusted publisher config carries over unchanged.
+**Migration effort:** Minimal. Swap the caller workflow and set the
+trusted publisher Environment field to `npm-publish` if you want the
+protected publish-environment gate.
 
 ---
 

@@ -148,7 +148,8 @@ requirement. `release.yml` was already trigger-agnostic as of v0.7
   a `dispatch-release` job that shells `gh workflow run`.
 - `auto-release.yml` drops the release-time input plumbing
   (`node-version`, `vector-test-command`, `audit-level`,
-  `strict-action-pins`, `reproducibility-mode`, `debug`,
+  `strict-action-pins`, `reproducibility-mode`,
+  `publish-environment`, `debug`,
   `test-command`). Those live on the consumer's `release.yml`
   again — one source of truth for release config.
 - `auto-release.yml` gains a `release-workflow` input (default

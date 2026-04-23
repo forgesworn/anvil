@@ -117,7 +117,9 @@ Before the first run, your library must have:
   explicitly, so the config path is the only reliable one).
 - npm trusted publisher configured for **your repo** and **your
   caller workflow file** (see "Trusted publisher caveat" below for
-  the exact fields).
+  the exact fields). The reusable workflow's publish job uses the
+  `npm-publish` GitHub Environment by default; create that environment
+  in GitHub if you want reviewer or branch/tag protection rules.
 - The package published to npm at least once. OIDC trusted publishing
   requires the package to exist on the registry — see "First publish
   of a new package" for the one-time bootstrap.
@@ -299,8 +301,8 @@ single-runner behaviour).
     rather than a CLI flag (npm 11.6+ short-circuits to `ENEEDAUTH`
     when `--provenance` is passed explicitly). On a clean re-run the
     registry's `dist.integrity` is compared to the recorded integrity:
-    match -> silent skip, mismatch -> loud failure (registry tarball
-    substitution alarm).
+    match -> silent skip, mismatch -> loud failure. The publish step
+    also refuses long-lived npm token auth and missing provenance config.
 15. **publish-jsr** -- only if `jsr.json` exists in your repo
 16. **update-release** -- updates the GitHub Release body from the
     matching `CHANGELOG.md` section, appends an *Artefact integrity*
@@ -343,6 +345,7 @@ bridge fires `release.yml` as the entry-point workflow.
 | `reproducibility-mode` | `strict` | Reusable workflow only. One of `strict`, `warn`, `off`. `strict` blocks the release if the two parallel builds produce different sha256s. `warn` logs the mismatch but publishes. `off` skips the second build entirely (v0.3 single-runner behaviour). The composite action silently ignores this input (it cannot run the two-build DAG; see "Advanced: composite action directly"). |
 | `tag` | *(empty)* | `release.yml` only. Explicit release tag (e.g. `v1.2.3`). Used by `auto-release.yml`'s chained publish job to pass the freshly-created tag. Empty defaults to `github.event.release.tag_name`, preserving the legacy release-event trigger path. |
 | `dry-run` | `false` | Skip real publish (for smoke-testing) |
+| `publish-environment` | `npm-publish` | Reusable workflow only. GitHub Environment attached to the publish job. Configure this same value in npm's trusted publisher Environment field to bind OIDC publishing to the protected publish environment. |
 | `debug` | `false` | If `true`, run a diagnostic step before publish that dumps npm version, redacted `.npmrc`, OIDC env vars, and `npm config list`. Flip this on when debugging trusted-publisher errors -- see "Trusted publisher caveat". Does not print token values. |
 
 ### Secrets
@@ -518,7 +521,13 @@ Configure on npmjs.com → your package → Settings → Trusted Publisher:
 | Organization or user | your GitHub org/user |
 | Repository | **your package's repo** |
 | Workflow filename | **your caller workflow file** (e.g. `release.yml`) |
-| Environment | (leave empty) |
+| Environment | `npm-publish` (or your `publish-environment` input value) |
+
+Create a matching GitHub Environment in your repo named `npm-publish`
+and configure protection rules there: required reviewers, prevent
+self-review, and branch/tag restrictions for your release refs. The
+workflow still runs without protection rules, but the environment is
+where the human approval gate lives.
 
 ### First publish of a new package
 
@@ -534,6 +543,11 @@ npm publish --access public
 Then configure trusted publishing on npmjs.com for all subsequent
 releases. The manual token can be revoked after the first publish --
 from that point on, OIDC handles everything.
+
+After trusted publishing works, set npm's package publishing access to
+require 2FA and disallow token publishing. Anvil also fails if
+`NPM_TOKEN`, `NODE_AUTH_TOKEN`, `NPM_CONFIG_PROVENANCE`, or npm auth
+material in `.npmrc` is present during publish.
 
 ### Why the caller-workflow trust model
 

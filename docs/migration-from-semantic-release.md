@@ -126,12 +126,16 @@ add GitHub Actions:
 | Organization or user | your org or user |
 | Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
-| Environment | *(empty)* |
+| Environment | `npm-publish` |
 
 The Repository and Workflow filename fields must match the caller, not
 the reusable workflow. npm matches against the OIDC token's
 `workflow_ref` claim, not `job_workflow_ref`. This is counterintuitive
 and it is in the README for a reason.
+
+Create a matching GitHub Environment named `npm-publish` if you want
+required reviewers, prevent self-review, or release-ref restrictions
+before npm publish.
 
 ## First release
 

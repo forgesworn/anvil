@@ -159,9 +159,14 @@ built-in Sigstore integration and GitHub's OIDC identity provider.
 4. The registry records the attestation, linking the published bytes
    to the GitHub Actions workflow run, commit SHA, and repository.
 
+Before publish, anvil also fails if `publishConfig.provenance` is not
+exactly `true`, if long-lived npm token auth is present (`NPM_TOKEN`,
+`NODE_AUTH_TOKEN`, auth material in `.npmrc`), or if
+`NPM_CONFIG_PROVENANCE` is set instead of using package metadata.
+
 ### Configuration
 
-Two things are required in your library:
+Three things are required in your library:
 
 **1. package.json** -- set `publishConfig.provenance`:
 
@@ -188,6 +193,16 @@ permissions:
 The reusable workflow (`forgesworn/anvil/.github/workflows/release.yml`)
 bakes these permissions in. If using the composite action directly, you
 must set them yourself.
+
+**3. Protected publish environment** -- the reusable workflow attaches
+the publish job to the `npm-publish` GitHub Environment by default.
+Create that environment in your repo and add required reviewers, prevent
+self-review, and branch/tag restrictions for release refs. In npm's
+trusted publisher settings, set Environment to the same value
+(`npm-publish`, unless you changed the `publish-environment` input).
+
+The composite action cannot set a job-level environment; use the
+reusable workflow for this gate.
 
 ### Verifying provenance as a consumer
 
@@ -224,6 +239,10 @@ point at YOUR repo and YOUR caller workflow, not at forgesworn/anvil.
 **`ENEEDAUTH` or `npm ERR! need auth`**: likely caused by passing
 `--provenance` as a CLI flag with npm >= 11.6. Remove the flag and use
 `publishConfig.provenance: true` in package.json instead.
+
+**`NPM_TOKEN is set` / `NODE_AUTH_TOKEN is set` / `npm auth material`**:
+remove legacy token publishing from the release job. Anvil publishes via
+OIDC only.
 
 **No provenance badge on npmjs.com**: check that `publishConfig.provenance`
 is set to `true` in package.json (not just truthy). Also verify that

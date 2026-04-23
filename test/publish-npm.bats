@@ -21,6 +21,7 @@ load helpers
 
 setup() {
   setup_fixture
+  unset NPM_TOKEN NODE_AUTH_TOKEN NPM_CONFIG_PROVENANCE NPM_CONFIG_USERCONFIG
 
   meta_dir="$FIXTURE_DIR/meta"
   mkdir -p "$meta_dir"
@@ -73,6 +74,10 @@ teardown() {
   unset NPM_LOG
   unset NPM_VIEW_INTEGRITY
   unset NPM_VIEW_ERROR
+  unset NPM_TOKEN
+  unset NODE_AUTH_TOKEN
+  unset NPM_CONFIG_PROVENANCE
+  unset NPM_CONFIG_USERCONFIG
 }
 
 # Build a complete fixture: package.json + tarball.meta + tarball file.
@@ -88,7 +93,7 @@ setup_release_fixture() {
   filename="${name#@}"
   filename="${filename//\//-}-${version}.tgz"
 
-  write_package_json "{\"name\":\"$name\",\"version\":\"$version\"}"
+  write_package_json "{\"name\":\"$name\",\"version\":\"$version\",\"publishConfig\":{\"provenance\":true}}"
 
   cat > "$meta_dir/tarball.meta" <<EOF
 filename=$filename
@@ -99,6 +104,42 @@ sha256=abc123
 integrity=$integrity
 EOF
   : > "$meta_dir/$filename"
+}
+
+@test "publish-npm: requires publishConfig.provenance true" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  write_package_json '{"name":"test-pkg","version":"1.0.0"}'
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"publishConfig.provenance"* ]]
+  ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
+}
+
+@test "publish-npm: refuses long-lived npm token env vars" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  export NPM_TOKEN="npm_secret"
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NPM_TOKEN is set"* ]]
+  ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
+}
+
+@test "publish-npm: refuses npmrc auth material" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  printf '//registry.npmjs.org/:_authToken=secret\n' > "$FIXTURE_DIR/.npmrc"
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"npm auth material"* ]]
+  ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
 }
 
 @test "publish-npm: happy path runs dry-run then real publish on the recorded tarball" {
@@ -167,7 +208,7 @@ EOF
 @test "publish-npm: fails when the meta file is missing" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
 
-  write_package_json '{"name":"test-pkg","version":"1.0.0"}'
+  write_package_json '{"name":"test-pkg","version":"1.0.0","publishConfig":{"provenance":true}}'
   # No tarball.meta written.
 
   run "$ACTION_ROOT/steps/publish-npm.sh"
@@ -191,7 +232,7 @@ EOF
 @test "publish-npm: fails when meta lacks the integrity field" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
 
-  write_package_json '{"name":"test-pkg","version":"1.0.0"}'
+  write_package_json '{"name":"test-pkg","version":"1.0.0","publishConfig":{"provenance":true}}'
   cat > "$meta_dir/tarball.meta" <<'EOF'
 filename=test-pkg-1.0.0.tgz
 path=/tmp/test-pkg-1.0.0.tgz
@@ -208,7 +249,7 @@ EOF
 @test "publish-npm: rejects path traversal in meta filename" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
 
-  write_package_json '{"name":"test-pkg","version":"1.0.0"}'
+  write_package_json '{"name":"test-pkg","version":"1.0.0","publishConfig":{"provenance":true}}'
   cat > "$meta_dir/tarball.meta" <<'EOF'
 filename=../../etc/passwd
 path=/tmp/test-pkg-1.0.0.tgz

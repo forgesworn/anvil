@@ -117,7 +117,11 @@ add GitHub Actions:
 | Organization or user | your org or user |
 | Repository | **your package's repo** (not `forgesworn/anvil`) |
 | Workflow filename | `release.yml` (your caller workflow) |
-| Environment | *(empty)* |
+| Environment | `npm-publish` |
+
+Create a matching GitHub Environment named `npm-publish` if you want
+required reviewers, prevent self-review, or release-ref restrictions
+before npm publish.
 
 ## First release
 
