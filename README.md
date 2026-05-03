@@ -546,8 +546,11 @@ from that point on, OIDC handles everything.
 
 After trusted publishing works, set npm's package publishing access to
 require 2FA and disallow token publishing. Anvil also fails if
-`NPM_TOKEN`, `NODE_AUTH_TOKEN`, `NPM_CONFIG_PROVENANCE`, or npm auth
-material in `.npmrc` is present during publish.
+`NPM_TOKEN`, a real `NODE_AUTH_TOKEN`, `NPM_CONFIG_PROVENANCE`, or
+npm auth material in `.npmrc` is present during publish. The literal
+`actions/setup-node` placeholders (`NODE_AUTH_TOKEN=XXXXX-XXXXX-XXXXX-XXXXX`
+and `_authToken=${NODE_AUTH_TOKEN}` in the generated `.npmrc`) are
+accepted; npm 11.5+ ignores them during OIDC exchange.
 
 ### Why the caller-workflow trust model
 

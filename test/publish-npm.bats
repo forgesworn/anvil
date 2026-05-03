@@ -142,6 +142,40 @@ EOF
   ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
 }
 
+@test "publish-npm: refuses real NODE_AUTH_TOKEN" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  export NODE_AUTH_TOKEN="npm_realToken123"
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NODE_AUTH_TOKEN is set"* ]]
+  ! grep -q 'NPM_CALL: publish' "$NPM_LOG"
+}
+
+@test "publish-npm: allows setup-node placeholder NODE_AUTH_TOKEN" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  export NODE_AUTH_TOKEN="XXXXX-XXXXX-XXXXX-XXXXX"
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 0 ]
+  grep -q "^NPM_CALL: publish --access public $meta_dir/test-pkg-1.0.0.tgz$" "$NPM_LOG"
+}
+
+@test "publish-npm: allows setup-node template _authToken in npmrc" {
+  command -v jq >/dev/null 2>&1 || skip "jq not available"
+
+  setup_release_fixture "test-pkg" "1.0.0" "sha512-LOCAL"
+  printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\nregistry=https://registry.npmjs.org/\n' > "$FIXTURE_DIR/.npmrc"
+
+  run "$ACTION_ROOT/steps/publish-npm.sh"
+  [ "$status" -eq 0 ]
+  grep -q "^NPM_CALL: publish --access public $meta_dir/test-pkg-1.0.0.tgz$" "$NPM_LOG"
+}
+
 @test "publish-npm: happy path runs dry-run then real publish on the recorded tarball" {
   command -v jq >/dev/null 2>&1 || skip "jq not available"
 
