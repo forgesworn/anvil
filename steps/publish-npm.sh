@@ -37,12 +37,24 @@ if ! jq -e '.publishConfig.provenance == true' "$pkg" >/dev/null; then
 fi
 
 [[ -z "${NPM_TOKEN:-}" ]] || die "NPM_TOKEN is set; use OIDC trusted publishing, not long-lived npm tokens"
-[[ -z "${NODE_AUTH_TOKEN:-}" ]] || die "NODE_AUTH_TOKEN is set; use OIDC trusted publishing, not long-lived npm tokens"
+# actions/setup-node writes literal placeholders when registry-url is set
+# without a real token: NODE_AUTH_TOKEN=XXXXX-XXXXX-XXXXX-XXXXX in env, and
+# `_authToken=${NODE_AUTH_TOKEN}` in the generated .npmrc. npm 11.5+ ignores
+# both during OIDC exchange, but a strict null/auth-material check would
+# trip on them. We accept the exact placeholder forms and reject anything
+# else. See actions/setup-node src/authutil.ts.
+SETUP_NODE_TOKEN_PLACEHOLDER='XXXXX-XXXXX-XXXXX-XXXXX'
+if [[ -n "${NODE_AUTH_TOKEN:-}" && "${NODE_AUTH_TOKEN}" != "$SETUP_NODE_TOKEN_PLACEHOLDER" ]]; then
+  die "NODE_AUTH_TOKEN is set; use OIDC trusted publishing, not long-lived npm tokens"
+fi
 [[ -z "${NPM_CONFIG_PROVENANCE:-}" ]] || die "NPM_CONFIG_PROVENANCE is set; use publishConfig.provenance instead"
 
 for npmrc in .npmrc "${NPM_CONFIG_USERCONFIG:-}"; do
   [[ -n "$npmrc" && -f "$npmrc" ]] || continue
-  if grep -Eq '(^|[/:])(_authToken|_auth|_password)[[:space:]]*=' "$npmrc"; then
+  # Allow the literal `${NODE_AUTH_TOKEN}` template form written by
+  # setup-node; reject any line whose auth value is anything else.
+  if grep -E '(^|[/:])(_authToken|_auth|_password)[[:space:]]*=' "$npmrc" \
+       | grep -vqE '=[[:space:]]*\$\{NODE_AUTH_TOKEN\}[[:space:]]*$'; then
     die "npm auth material found in $npmrc; remove token auth before publishing"
   fi
 done
