@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1 (2026-05-03)
+
+### Bug Fixes
+
+- accept setup-node placeholder NODE_AUTH_TOKEN and npmrc template (#8)
+
+
+
 ## 0.10.0 (2026-04-23)
 
 ### Features
