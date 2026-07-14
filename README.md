@@ -662,7 +662,7 @@ Non-goals:
 If this action saves your release pipeline a headache and you want to
 support the work, you can sponsor via
 [GitHub Sponsors](https://github.com/sponsors/TheCryptoDonkey) or
-Lightning at [strike.me/thedonkey](https://strike.me/thedonkey). Funding
+Lightning at `profusemeat89@walletofsatoshi.com`. Funding
 goes toward maintenance of this action and the wider forgesworn stack.
 
 ## Licence
