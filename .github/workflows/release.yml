@@ -222,7 +222,7 @@ jobs:
           fi
 
       - name: Checkout consumer repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # On chained calls github.ref is the outer run's ref (usually
           # refs/heads/main). Explicitly check out the tag that was just
@@ -231,7 +231,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout anvil at pinned SHA
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
@@ -328,14 +328,14 @@ jobs:
       sha256: ${{ steps.record.outputs.sha256 }}
     steps:
       - name: Checkout consumer repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Match build-a's ref so both runners pack the same tree.
           ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
           persist-credentials: false
 
       - name: Checkout anvil at pinned SHA
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
@@ -384,7 +384,7 @@ jobs:
       reproducible: ${{ steps.compare.outputs.reproducible }}
     steps:
       - name: Checkout anvil at pinned SHA
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
@@ -438,7 +438,7 @@ jobs:
       DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '0' }}
     steps:
       - name: Checkout consumer repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # update-release.sh calls `git rev-parse HEAD` to supply
           # --target when creating a Release; that resolves to the
@@ -447,7 +447,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout anvil at pinned SHA
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/anvil
           ref: ${{ github.job_workflow_sha }}
