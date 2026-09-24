@@ -177,7 +177,8 @@ The reusable workflow runs as a four-job DAG:
 10. verify-audit -- npm audit --omit=dev (runtime deps only)
 11. verify-exports -- every exports subpath exists on disk
 12. verify-secrets -- grep dist/ and files paths for secret markers
-13. record-tarball -- npm pack with normalised mtimes, hash, write meta
+13. verify-lifecycle-scripts -- warn/fail on unpermitted preinstall/install/postinstall hooks
+14. record-tarball -- npm pack with normalised mtimes, hash, write meta
 
 ### build-b (parallel build)
 
@@ -211,6 +212,7 @@ All in steps/, all bash, all sourcing lib.sh for shared helpers:
 | verify-exports.sh | Every exports subpath exists on disk |
 | verify-secrets.sh | Secret scan over pack set |
 | verify-action-pins.sh | Warn/fail on unpinned uses: in workflows |
+| verify-lifecycle-scripts.sh | Warn/fail on unpermitted preinstall/install/postinstall hooks |
 | normalise-mtimes.sh | Touch all files to SOURCE_DATE_EPOCH |
 | record-tarball.sh | npm pack, hash, write tarball.meta |
 | compare-tarball-meta.sh | Reproducibility gate (compare two metas) |
@@ -235,6 +237,9 @@ All in steps/, all bash, all sourcing lib.sh for shared helpers:
 | version-strategy | manual | manual: you bump and tag; verify: also checks conventional commits |
 | reproducibility-mode | strict | strict: block on mismatch; warn: log only; off: skip build-b |
 | strict-action-pins | true | Fail on unpinned uses: refs in consumer workflows |
+| lifecycle-scripts-policy | warn | warn: log unpermitted preinstall/install/postinstall hooks; strict: fail the release; off: skip the gate |
+| allowed-lifecycle-scripts | {} | JSON object mapping a hook name to the exact command string permitted, e.g. {"postinstall": "node-gyp rebuild"} |
+| publish-environment | npm-publish | GitHub Environment used by the publish job; must match the Environment field configured in npm's trusted publisher settings |
 | tag | (empty) | Explicit release tag (e.g. v1.2.3). Set by auto-release.yml's workflow_dispatch bridge via `${{ inputs.tag || '' }}`. Empty defaults to github.event.release.tag_name for the legacy release-event trigger path. |
 | dry-run | false | Skip real publish |
 | debug | false | Diagnostic logging for OIDC issues |
@@ -266,8 +271,9 @@ jobs:
 ```
 
 The composite action does NOT include the reproducible-build gate
-(build-b and reproduce jobs). It accepts the same inputs as the
-reusable workflow except reproducibility-mode.
+(build-b and reproduce jobs) or the GitHub Environment protection on
+the publish job. It accepts the same inputs as the reusable workflow
+except reproducibility-mode and publish-environment.
 
 ## Trusted publisher setup
 
@@ -282,7 +288,12 @@ Configure on npmjs.com -> your package -> Settings -> Trusted Publisher:
 | Organization or user | your GitHub org/user |
 | Repository | your package's repo (NOT forgesworn/anvil) |
 | Workflow filename | your caller workflow file (e.g. release.yml) |
-| Environment | (leave empty) |
+| Environment | npm-publish (or the value of your publish-environment input) |
+
+The reusable workflow's publish job runs under a GitHub Environment
+(publish-environment, default npm-publish). Create a matching
+Environment in your repo settings if you want required reviewers,
+prevent self-review, or release-ref restrictions before npm publish.
 
 For the first publish of a brand-new package, you may need to create the
 package on npm first (npm publish --access public from a workstation with
@@ -360,6 +371,19 @@ Special cases:
 
 strict-action-pins (default: true) controls whether unpinned refs
 block the release or only warn.
+
+## Lifecycle-script check (detailed)
+
+verify-lifecycle-scripts.sh reads preinstall/install/postinstall from
+the consumer's package.json and compares each against
+allowed-lifecycle-scripts, a JSON object mapping hook name to the
+exact command string permitted (default {}, so no hook is allowed by
+default). Motivated by the April 2026 @bitwarden/cli install-hook
+compromise.
+
+lifecycle-scripts-policy (default: warn) controls whether an
+unpermitted hook blocks the release (strict), only logs (warn), or is
+skipped entirely (off).
 
 ## Secret scan (detailed)
 
@@ -448,8 +472,10 @@ Defends against:
 - Exports/files drift (verify-exports)
 - Runtime dep advisories (verify-audit)
 - Tag-mutation supply-chain attacks (verify-action-pins)
+- Malicious install-time hooks in the published package (verify-lifecycle-scripts)
 - Non-deterministic builds masking regressions (reproduce gate)
 - Registry tarball substitution (integrity comparison on re-run)
+- Unreviewed publish after the release workflow starts (publish-environment gate)
 
 Does NOT defend against:
 - Malicious maintainer

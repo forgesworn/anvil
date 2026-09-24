@@ -62,7 +62,7 @@ Before the first run, your library must have:
   only reliable one).
 - npm trusted publisher configured for your repo and your caller
   workflow file (not `forgesworn/anvil`).
-- The package must exist on npm — trusted publishing requires a
+- The package must exist on npm: trusted publishing requires a
   prior manual publish to bootstrap.
 - A `CHANGELOG.md` entry for the version being released.
 
@@ -114,7 +114,7 @@ jobs:
 
 No PAT needed (workflow_dispatch is an exception to GitHub's anti-
 recursion rule). Trusted-publisher config on npmjs.com continues to
-point at release.yml — the workflow_dispatch bridge preserves
+point at release.yml; the workflow_dispatch bridge preserves
 release.yml as the OIDC entry-point.
 
 All release-time inputs (vector-test-command, reproducibility-mode,
@@ -150,6 +150,7 @@ All in `steps/`, all bash, all sourcing `lib.sh` for shared helpers:
 | normalise-mtimes.sh | Touch all files to SOURCE_DATE_EPOCH |
 | record-tarball.sh | npm pack, hash, write tarball.meta |
 | compare-tarball-meta.sh | Reproducibility gate (compare two metas) |
+| verify-lifecycle-scripts.sh | Warn/fail on unpermitted preinstall/install/postinstall hooks |
 | publish-npm.sh | Publish the exact recorded tarball via OIDC |
 | publish-jsr.sh | JSR publish if jsr.json exists |
 | update-release.sh | CHANGELOG extraction, integrity block, asset upload |
@@ -189,7 +190,7 @@ to `package.json`) which controls the path to the manifest file.
 - If any exported path does not exist on disk, the step exits with
   status 1 and the release is blocked.
 - Output on failure: `warning: missing: ./dist/missing.js` for each
-  missing path, then `error: N exports targets missing on disk —
+  missing path, then `error: N exports targets missing on disk:
   refusing to publish`.
 - Output on success: `ok  ./dist/index.js` for each path, then
   `ok: all N export targets exist`.
@@ -378,14 +379,18 @@ with:
 | version-strategy | manual | manual: you bump and tag; verify: also checks conventional commits match your bump |
 | reproducibility-mode | strict | strict: block on mismatch; warn: log only; off: skip build-b and reproduce jobs entirely |
 | strict-action-pins | true | Fail on unpinned `uses:` refs in consumer workflows |
+| lifecycle-scripts-policy | warn | warn: log unpermitted preinstall/install/postinstall hooks; strict: fail the release; off: skip the gate |
+| allowed-lifecycle-scripts | {} | JSON object mapping a hook name to the exact command string permitted |
+| publish-environment | npm-publish | GitHub Environment used by the publish job; must match the Environment field in npm's trusted publisher config |
 | tag | (empty) | Explicit release tag (e.g. `v1.2.3`). Set by `auto-release.yml`'s workflow_dispatch bridge via `${{ inputs.tag || '' }}`. Empty defaults to `github.event.release.tag_name` for the legacy release-event trigger path. |
 | dry-run | false | Skip real publish |
 | debug | false | Diagnostic logging for OIDC issues |
 
 The composite action (`uses: forgesworn/anvil@v0`) accepts the same
-inputs *except* `reproducibility-mode` (the composite cannot run the
-two-build DAG — use the reusable workflow for reproducible-build
-verification).
+inputs *except* `reproducibility-mode` and `publish-environment` (the
+composite cannot run the two-build DAG or the GitHub Environment
+protection on the publish job -- use the reusable workflow for
+reproducible-build verification and environment-gated publishing).
 
 Composite action callers must add `actions/checkout` before the step
 (the reusable workflow handles checkout internally):
