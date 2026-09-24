@@ -1,34 +1,64 @@
-# Agent instructions
+# forgesworn/anvil
 
-This repo uses `CLAUDE.md` as the canonical agent-facing instruction
-file. Any coding agent (Claude Code, Cursor, Copilot, Gemini, Codex)
-should read it before making changes:
+A GitHub Action (reusable workflow + composite fallback) that publishes npm
+packages with hard pre-publish gates: reproducible-build attestation, OIDC
+trusted publishing, secret scan, exports-map check, lifecycle-script check,
+and action-pin auditing. Pure bash, no Node tooling in the action itself.
 
-- [`CLAUDE.md`](CLAUDE.md) — architecture, constraints, audit budget,
-  conventions, non-goals.
+## Build & Test
 
-Key points that apply to any agent:
+| Command | Purpose |
+|---------|---------|
+| `bats test/*.bats` | Run the full test suite |
+| `shellcheck -x steps/*.sh` | Lint step scripts (`-x` follows sourced `lib.sh`) |
+| `wc -l steps/*.sh` | Check the audit budget before adding code |
 
-- **Audit budget.** Total bash across `steps/*.sh` must stay under
-  ~1600 lines so the whole action remains auditable in thirty minutes.
-  Check `wc -l steps/*.sh` before adding code.
-- **Zero dependencies.** No npm packages, no compiled binaries, no
-  fetched tooling. Only tools already on the GitHub Actions runner
-  image (bash, jq, gh, npm, shasum, awk, sed, find, grep).
-- **Threat model is load-bearing.** [`THREAT-MODEL.md`](THREAT-MODEL.md)
-  documents the defended and explicitly-undefended surfaces. Any change
-  that expands the attack surface must update the threat model first.
-- **British English** throughout (`LICENCE`, "normalise", "optimise").
-- **Commit style**: `type: description` (lowercase, imperative). No
-  `Co-Authored-By` trailers.
+CI (`.github/workflows/ci.yml`) runs both `shellcheck` and `bats` on push and
+pull request to `main`.
 
-For tests and linting:
+## Structure
 
-```sh
-bats test/*.bats           # full test suite
-shellcheck -x steps/*.sh   # lint step scripts
+```
+action.yml          Composite action (no reproducible-build gate)
+.github/workflows/
+  release.yml       Reusable workflow (four-job DAG, full protection)
+  auto-release.yml  Companion: push-to-main conventional-commit automation
+  ci.yml             CI: shellcheck + bats
+steps/               All step scripts, all bash, all sourcing lib.sh
+test/                bats tests
+docs/                Migration guides, comparison, design docs
+examples/            Consumer setup guide
 ```
 
-Everything agent-specific lives in `CLAUDE.md`. This file exists so
-non-Claude agents discover the same constraints without having to
-infer them from the repo's conventions.
+## Conventions
+
+- British English throughout (`LICENCE`, "normalise", "optimise").
+- Commit style: `type: description` (lowercase, imperative). No
+  `Co-Authored-By` trailers.
+- All step scripts source `steps/lib.sh` for shared helpers.
+- Inputs default to safe values (`strict-action-pins` defaults to `true`,
+  `reproducibility-mode` defaults to `strict`).
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `THREAT-MODEL.md` | Defended and explicitly-undefended surfaces; load-bearing |
+| `steps/lib.sh` | Shared helpers (`header`, `log`, `warn`, `die`, `require_cmds`) |
+| `llms.txt` / `llms-full.txt` | Agent-facing API reference; keep in sync with the source |
+
+## Common Pitfalls
+
+- **Audit budget**: total bash across `steps/*.sh` must stay under ~1600
+  lines so the whole action remains auditable in thirty minutes. Check
+  `wc -l steps/*.sh` before adding code.
+- **Zero dependencies**: no npm packages, no compiled binaries, no fetched
+  tooling. Only tools already on the GitHub Actions runner image (bash, jq,
+  gh, npm, shasum, awk, sed, find, grep).
+- **Threat model is load-bearing**: any change that expands the attack
+  surface must update `THREAT-MODEL.md` first.
+- **Non-goals**: monorepo support (single-package by design), Node-based
+  tooling inside the action, automated semver from commits as a
+  release-blocking step (`verify` mode warns; `auto-release.yml` is a
+  separate companion workflow, not a version-strategy value), dependencies
+  not on the default runner image.
