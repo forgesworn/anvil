@@ -72,6 +72,8 @@ For fully automatic releases from conventional commits on main, add
 an auto-release.yml workflow. It parses commits since the last tag,
 bumps package.json, updates CHANGELOG.md, tags, pushes, and fires
 release.yml via workflow_dispatch.
+The new CHANGELOG section goes above the first version heading, so a
+title and any notes above the version list stay on top.
 
 Auto mode is a two-file setup. Your release.yml must declare a
 workflow_dispatch trigger with a tag input:

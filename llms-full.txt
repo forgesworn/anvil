@@ -90,6 +90,8 @@ entirely. On push to main it parses conventional commits, bumps
 package.json, updates CHANGELOG.md, tags, pushes, and fires
 release.yml via workflow_dispatch to publish -- all in one human
 push, no PAT.
+The new CHANGELOG section goes above the first version heading, so a
+title and any notes above the version list stay on top.
 
 Auto mode is a TWO-FILE setup. Your release.yml must declare a
 workflow_dispatch trigger with a tag input (alongside the manual

@@ -198,30 +198,38 @@ jobs:
               echo "$CHANGELOG"
             } > "$changelog_file"
           else
-            # Insert new section after the first top-level heading
-            tmp="$(mktemp)"
-            inserted=false
-            while IFS= read -r line; do
-              echo "$line" >> "$tmp"
-              if ! $inserted && [[ "$line" =~ ^#\  ]]; then
-                {
-                  echo ""
-                  echo "$heading"
-                  echo ""
-                  echo "$CHANGELOG"
-                } >> "$tmp"
-                inserted=true
-              fi
-            done < "$changelog_file"
+            # Insert the new section above the first version heading, so a
+            # conventional-changelog major heading (`# [2.0.0](...)`) is not
+            # mistaken for the title. A version heading is 1-3 #s plus a
+            # dotted x.y.z, the rule changelog-extract.sh uses. With no
+            # version heading, go after the first H1 title, else at the top.
+            version_re='^#{1,3}[[:space:]].*[0-9]+\.[0-9]+\.[0-9]+'
+            title_re='^#[[:space:]]'
+            if grep -Eq "$version_re" "$changelog_file"; then
+              mode=version
+            elif grep -Eq "$title_re" "$changelog_file"; then
+              mode=title
+            else
+              mode=top
+            fi
 
-            if ! $inserted; then
-              {
-                echo "$heading"
-                echo ""
-                echo "$CHANGELOG"
-                echo ""
-                cat "$changelog_file"
-              } > "$tmp"
+            tmp="$(mktemp)"
+            if [[ "$mode" == top ]]; then
+              printf '%s\n\n%s\n\n' "$heading" "$CHANGELOG" > "$tmp"
+              cat "$changelog_file" >> "$tmp"
+            else
+              inserted=false
+              while IFS= read -r line || [[ -n "$line" ]]; do
+                if ! $inserted && [[ "$mode" == version && "$line" =~ $version_re ]]; then
+                  printf '%s\n\n%s\n\n' "$heading" "$CHANGELOG" >> "$tmp"
+                  inserted=true
+                fi
+                printf '%s\n' "$line" >> "$tmp"
+                if ! $inserted && [[ "$mode" == title && "$line" =~ $title_re ]]; then
+                  printf '\n%s\n\n%s\n' "$heading" "$CHANGELOG" >> "$tmp"
+                  inserted=true
+                fi
+              done < "$changelog_file"
             fi
 
             mv "$tmp" "$changelog_file"
