@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.2 (2026-10-18)
+
+### Bug Fixes
+
+- insert auto-release CHANGELOG entries above the first version heading (#13)
+
+
+
 ## 0.10.1 (2026-05-03)
 
 ### Bug Fixes
