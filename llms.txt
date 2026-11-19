@@ -10,6 +10,12 @@
 > anvil.works (low-code app platform). This is a GitHub Action for
 > npm release pipelines.
 
+## ForgeSworn ecosystem
+
+- [ForgeSworn library guide](https://forgesworn.dev/llms.txt): Find related libraries, tools and integration guides by task and runtime.
+- [ForgeSworn on GitHub](https://github.com/forgesworn): Browse the organisation’s public repositories.
+- [Project source](https://github.com/forgesworn/anvil): Canonical source repository, documentation and release information.
+
 ## What this is
 
 A GitHub Action (reusable workflow + composite fallback) that publishes
